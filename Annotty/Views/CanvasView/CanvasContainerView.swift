@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Container view that combines MetalCanvasView with UIKit gesture handling
+/// Container view that combines MetalCanvasView with line annotation overlay
 struct CanvasContainerView: View {
     @ObservedObject var viewModel: CanvasViewModel
 
@@ -23,92 +23,25 @@ struct CanvasContainerView: View {
                         )
                 }
 
-                // Brush preview circle (when drawing)
-                if viewModel.isDrawing {
-                    Circle()
-                        .stroke(viewModel.isPainting ? Color.green : Color.red, lineWidth: 2)
-                        .frame(width: viewModel.brushPreviewSize, height: viewModel.brushPreviewSize)
-                        .position(viewModel.lastDrawPoint)
-                        .allowsHitTesting(false)
-                }
+                // Line annotation overlay
+                LineOverlayView(viewModel: viewModel)
+                    .allowsHitTesting(false)
 
-                // Fill mode indicator overlay
-                if viewModel.isFillMode {
-                    Rectangle()
-                        .fill(Color.cyan.opacity(0.05))
-                        .allowsHitTesting(false)
-
-                    // Fill mode badge
-                    VStack {
-                        HStack {
-                            Spacer()
-                            Text("Fill Mode")
-                                .font(.caption)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.cyan.opacity(0.8))
-                                .foregroundColor(.white)
-                                .cornerRadius(4)
-                                .padding(8)
-                        }
+                // Selected line indicator badge
+                VStack {
+                    HStack {
                         Spacer()
+                        selectedLineBadge
+                            .padding(8)
                     }
-                    .allowsHitTesting(false)
+                    Spacer()
                 }
+                .allowsHitTesting(false)
 
-                // SAM mode indicator overlay
-                if viewModel.isSAMMode {
-                    // SAM mode badge
-                    VStack {
-                        HStack {
-                            Spacer()
-                            Text("SAM: Tap or Drag")
-                                .font(.caption)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.cyan.opacity(0.8))
-                                .foregroundColor(.white)
-                                .cornerRadius(4)
-                                .padding(8)
-                        }
-                        Spacer()
-                    }
-                    .allowsHitTesting(false)
-                }
-
-                // SAM bbox drawing overlay
-                if let start = viewModel.samBBoxStart, let end = viewModel.samBBoxEnd {
-                    SAMBBoxOverlay(start: start, end: end)
+                // Drag indicator (shows when actively dragging)
+                if viewModel.isDraggingLine {
+                    dragIndicator
                         .allowsHitTesting(false)
-                }
-
-                // Smooth mode indicator overlay
-                if viewModel.isSmoothMode {
-                    // Smooth mode badge
-                    VStack {
-                        HStack {
-                            Spacer()
-                            Text("Smooth: Trace Edge")
-                                .font(.caption)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.orange.opacity(0.8))
-                                .foregroundColor(.white)
-                                .cornerRadius(4)
-                                .padding(8)
-                        }
-                        Spacer()
-                    }
-                    .allowsHitTesting(false)
-                }
-
-                // Smooth stroke path overlay
-                if !viewModel.smoothStrokePoints.isEmpty {
-                    SmoothStrokeOverlay(
-                        points: viewModel.smoothStrokePoints,
-                        brushRadius: CGFloat(viewModel.brushRadius) * viewModel.currentScale
-                    )
-                    .allowsHitTesting(false)
                 }
             }
             .onAppear {
@@ -117,6 +50,45 @@ struct CanvasContainerView: View {
             .onChange(of: geometry.size) { _, newSize in
                 viewModel.updateViewSize(newSize)
             }
+        }
+    }
+
+    /// Badge showing the currently selected line
+    private var selectedLineBadge: some View {
+        let lineType = viewModel.selectedLineType
+        let eyeLabel = lineType.isLeftEye ? "L" : "R"
+
+        return HStack(spacing: 4) {
+            Circle()
+                .fill(lineType.color)
+                .frame(width: 10, height: 10)
+
+            Text("\(eyeLabel): \(lineType.displayName)")
+                .font(.caption)
+                .foregroundColor(.white)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(Color.black.opacity(0.6))
+        .cornerRadius(4)
+    }
+
+    /// Drag indicator showing line movement direction
+    private var dragIndicator: some View {
+        let lineType = viewModel.selectedLineType
+        let direction = lineType.isVertical ? "↔" : "↕"
+
+        return VStack {
+            Spacer()
+            HStack {
+                Spacer()
+                Text(direction)
+                    .font(.system(size: 32, weight: .bold))
+                    .foregroundColor(lineType.color)
+                    .shadow(color: .black, radius: 2)
+                Spacer()
+            }
+            Spacer()
         }
     }
 }

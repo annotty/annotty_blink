@@ -7,31 +7,27 @@ enum InputType {
     case finger
 }
 
-/// Gesture coordinator that separates Apple Pencil from finger input
-/// - Pencil: Drawing immediately (no delay)
-/// - 1-finger: Drawing after 32ms delay (cancelable)
-/// - 2+ fingers: Navigation (pan, zoom, rotate) - cancels pending/ongoing stroke
+/// Gesture coordinator for blink annotation line dragging
+/// - Pencil/Finger: Line dragging immediately
+/// - 2+ fingers: Navigation (pan, zoom, rotate)
 /// - 2-finger tap: Undo
 /// - 3-finger tap: Redo
 class GestureCoordinator: NSObject {
     // MARK: - Configuration
 
     /// Delay before finger drawing starts (allows time to detect 2nd finger)
-    static let fingerDrawingDelay: TimeInterval = 0.032  // 32ms ≈ 2 frames at 60fps
+    static let fingerDrawingDelay: TimeInterval = 0.032  // 32ms
 
     // MARK: - Callbacks
 
-    /// Called when stroke begins (pencil or finger after delay)
-    var onStrokeBegin: ((CGPoint) -> Void)?
+    /// Called when line drag begins
+    var onLineDragBegin: ((CGPoint) -> Void)?
 
-    /// Called when stroke continues
-    var onStrokeContinue: ((CGPoint) -> Void)?
+    /// Called when line drag continues
+    var onLineDragContinue: ((CGPoint) -> Void)?
 
-    /// Called when stroke ends normally
-    var onStrokeEnd: (() -> Void)?
-
-    /// Called when stroke is cancelled (2+ fingers detected)
-    var onStrokeCancel: (() -> Void)?
+    /// Called when line drag ends
+    var onLineDragEnd: (() -> Void)?
 
     /// Called when pan gesture updates
     var onPan: ((CGPoint) -> Void)?
@@ -48,59 +44,24 @@ class GestureCoordinator: NSObject {
     /// Called when redo triggered (3-finger tap)
     var onRedo: (() -> Void)?
 
-    /// Called when fill tap triggered (single tap in fill mode)
-    var onFillTap: ((CGPoint) -> Void)?
-
-    /// Called when SAM tap triggered (single tap in SAM mode)
-    var onSAMTap: ((CGPoint) -> Void)?
-
-    /// Called when SAM bbox drag starts
-    var onSAMBBoxStart: ((CGPoint) -> Void)?
-
-    /// Called when SAM bbox drag continues (provides start and current points)
-    var onSAMBBoxDrag: ((CGPoint, CGPoint) -> Void)?
-
-    /// Called when SAM bbox drag ends (provides start and end points)
-    var onSAMBBoxEnd: ((CGPoint, CGPoint) -> Void)?
-
-    /// Called when smooth stroke begins
-    var onSmoothStrokeBegin: ((CGPoint) -> Void)?
-
-    /// Called when smooth stroke continues
-    var onSmoothStrokeContinue: ((CGPoint) -> Void)?
-
-    /// Called when smooth stroke ends
-    var onSmoothStrokeEnd: (() -> Void)?
-
-    /// Whether fill mode is active
-    var isFillMode: Bool = false
-
-    /// Whether SAM mode is active (for point prompt segmentation)
-    var isSAMMode: Bool = false
-
-    /// Whether smooth mode is active (for boundary smoothing)
-    var isSmoothMode: Bool = false
-
     // MARK: - State
 
-    private var isDrawing = false
-    private var isPendingDraw = false  // Waiting for 32ms delay
-    private var pendingDrawPoint: CGPoint = .zero
-    private var pendingDrawTimer: DispatchWorkItem?
+    private var isDragging = false
+    private var isPendingDrag = false
+    private var pendingDragPoint: CGPoint = .zero
+    private var pendingDragTimer: DispatchWorkItem?
     private var currentTouchCount = 0
     private var lastPinchScale: CGFloat = 1.0
-    private var drawingInputType: InputType = .finger
-    private var touchStartPoint: CGPoint = .zero  // For fill/SAM tap detection
-    private var isSAMBBoxDragging = false  // Whether currently dragging a SAM bbox
-
-    /// Threshold to distinguish tap from drag (in points)
-    private let samDragThreshold: CGFloat = 20
+    private var dragInputType: InputType = .finger
 
     /// Last time a navigation gesture (pinch/rotation) ended
     private var lastNavigationGestureTime: Date = .distantPast
 
     /// Cooldown period after navigation gestures before allowing undo/redo
     private let undoCooldownPeriod: TimeInterval = 0.3
+
+    /// Cooldown period after navigation gestures before allowing line dragging
+    private let lineDragCooldownPeriod: TimeInterval = 0.2
 
     // MARK: - Gesture Recognizers
 
@@ -113,7 +74,7 @@ class GestureCoordinator: NSObject {
     // MARK: - Setup
 
     func setupGestures(for view: UIView) {
-        // 2-finger tap (undo) - set up FIRST so other gestures can require it to fail
+        // 2-finger tap (undo)
         let twoFingerTap = UITapGestureRecognizer(target: self, action: #selector(handleTwoFingerTap(_:)))
         twoFingerTap.numberOfTouchesRequired = 2
         twoFingerTap.numberOfTapsRequired = 1
@@ -166,12 +127,16 @@ class GestureCoordinator: NSObject {
 
     /// Handle touch began
     func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?, in view: UIView) {
-        // Update total touch count
         currentTouchCount = event?.allTouches?.filter { $0.phase != .ended && $0.phase != .cancelled }.count ?? touches.count
 
-        // If 2+ fingers, cancel any pending/ongoing stroke
+        // If 2+ fingers, cancel any pending/ongoing drag
         if currentTouchCount >= 2 {
-            cancelPendingAndOngoingStroke()
+            cancelPendingAndOngoingDrag()
+            return
+        }
+
+        // Check cooldown after navigation gestures
+        guard Date().timeIntervalSince(lastNavigationGestureTime) > lineDragCooldownPeriod else {
             return
         }
 
@@ -179,172 +144,95 @@ class GestureCoordinator: NSObject {
         let inputType = classifyTouch(touch)
         let location = touch.location(in: view)
 
-        // Record start point for fill/SAM tap detection
-        touchStartPoint = location
-
-        // In smooth mode, handle like regular drawing but with different callbacks
-        if isSmoothMode {
-            // Allow both pencil and finger for smooth mode (finger for simulator testing)
-            drawingInputType = inputType
-            isDrawing = true
-            onSmoothStrokeBegin?(location)
-            return
-        }
-
-        // In fill mode or SAM mode, wait for tap (handled in touchesEnded)
-        if isFillMode || isSAMMode {
-            return
-        }
-
         if inputType == .pencil {
-            // Pencil: Start drawing immediately
-            drawingInputType = .pencil
-            isDrawing = true
-            onStrokeBegin?(location)
+            // Pencil: Start dragging immediately
+            dragInputType = .pencil
+            isDragging = true
+            onLineDragBegin?(location)
         } else {
             // Finger: Wait 32ms before starting
-            drawingInputType = .finger
-            isPendingDraw = true
-            pendingDrawPoint = location
+            dragInputType = .finger
+            isPendingDrag = true
+            pendingDragPoint = location
 
-            pendingDrawTimer?.cancel()
-            pendingDrawTimer = DispatchWorkItem { [weak self] in
-                guard let self = self, self.isPendingDraw else { return }
-                // 32ms passed without 2nd finger - start drawing
-                self.isPendingDraw = false
-                self.isDrawing = true
-                self.onStrokeBegin?(self.pendingDrawPoint)
+            pendingDragTimer?.cancel()
+            pendingDragTimer = DispatchWorkItem { [weak self] in
+                guard let self = self, self.isPendingDrag else { return }
+                // Re-check cooldown when timer fires
+                guard Date().timeIntervalSince(self.lastNavigationGestureTime) > self.lineDragCooldownPeriod else {
+                    self.isPendingDrag = false
+                    return
+                }
+                self.isPendingDrag = false
+                self.isDragging = true
+                self.onLineDragBegin?(self.pendingDragPoint)
             }
             DispatchQueue.main.asyncAfter(
                 deadline: .now() + Self.fingerDrawingDelay,
-                execute: pendingDrawTimer!
+                execute: pendingDragTimer!
             )
         }
     }
 
     /// Handle touch moved
     func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?, in view: UIView) {
-        // Update total touch count
         currentTouchCount = event?.allTouches?.filter { $0.phase != .ended && $0.phase != .cancelled }.count ?? touches.count
 
-        // If 2+ fingers detected during drawing, cancel
+        // If 2+ fingers detected during dragging, cancel
         if currentTouchCount >= 2 {
-            cancelPendingAndOngoingStroke()
-            isSAMBBoxDragging = false
+            cancelPendingAndOngoingDrag()
             return
         }
 
         guard let touch = touches.first else { return }
         let location = touch.location(in: view)
 
-        // Smooth mode: send continue events
-        if isSmoothMode && isDrawing {
-            onSmoothStrokeContinue?(location)
-            return
-        }
-
-        // SAM mode: handle bbox dragging
-        if isSAMMode {
-            let distance = hypot(location.x - touchStartPoint.x, location.y - touchStartPoint.y)
-
-            if !isSAMBBoxDragging && distance >= samDragThreshold {
-                // Start bbox dragging
-                isSAMBBoxDragging = true
-                onSAMBBoxStart?(touchStartPoint)
-            }
-
-            if isSAMBBoxDragging {
-                // Continue bbox dragging
-                onSAMBBoxDrag?(touchStartPoint, location)
-            }
-            return
-        }
-
-        if isPendingDraw {
-            // Still waiting for 32ms delay - update pending point
-            pendingDrawPoint = location
-        } else if isDrawing {
-            // Already drawing - continue stroke
-            onStrokeContinue?(location)
+        if isPendingDrag {
+            // Still waiting for delay - update pending point
+            pendingDragPoint = location
+        } else if isDragging {
+            // Already dragging - continue
+            onLineDragContinue?(location)
         }
     }
 
     /// Handle touch ended
     func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?, in view: UIView) {
-        // Update total touch count
         let remainingTouches = event?.allTouches?.filter { $0.phase != .ended && $0.phase != .cancelled }.count ?? 0
         currentTouchCount = remainingTouches
 
-        guard let touch = touches.first else { return }
-        let location = touch.location(in: view)
-
-        // Smooth mode: end stroke
-        if isSmoothMode && isDrawing {
-            isDrawing = false
-            onSmoothStrokeEnd?()
-            return
-        }
-
-        // Fill mode: detect tap (small movement from start)
-        if isFillMode {
-            let distance = hypot(location.x - touchStartPoint.x, location.y - touchStartPoint.y)
-            if distance < 20 {  // Tap threshold: 20 points
-                onFillTap?(location)
-            }
-            return
-        }
-
-        // SAM mode: detect tap or bbox drag
-        if isSAMMode {
-            if isSAMBBoxDragging {
-                // End bbox dragging
-                onSAMBBoxEnd?(touchStartPoint, location)
-                isSAMBBoxDragging = false
-            } else {
-                // Tap for point prompt
-                let distance = hypot(location.x - touchStartPoint.x, location.y - touchStartPoint.y)
-                if distance < samDragThreshold {
-                    onSAMTap?(location)
-                }
-            }
-            return
-        }
-
-        if isPendingDraw {
-            // Touch ended before 32ms delay - cancel pending
-            cancelPendingDraw()
-        } else if isDrawing {
-            // Normal stroke end
-            isDrawing = false
-            onStrokeEnd?()
+        if isPendingDrag {
+            // Touch ended before delay - cancel pending
+            cancelPendingDrag()
+        } else if isDragging {
+            // Normal drag end
+            isDragging = false
+            onLineDragEnd?()
         }
     }
 
     /// Handle touch cancelled
     func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?, in view: UIView) {
         currentTouchCount = 0
-        isSAMBBoxDragging = false
-        cancelPendingAndOngoingStroke()
+        cancelPendingAndOngoingDrag()
     }
 
     // MARK: - Private Helpers
 
-    /// Cancel pending draw timer (before 32ms)
-    private func cancelPendingDraw() {
-        pendingDrawTimer?.cancel()
-        pendingDrawTimer = nil
-        isPendingDraw = false
+    /// Cancel pending drag timer (before 32ms)
+    private func cancelPendingDrag() {
+        pendingDragTimer?.cancel()
+        pendingDragTimer = nil
+        isPendingDrag = false
     }
 
-    /// Cancel both pending and ongoing strokes
-    private func cancelPendingAndOngoingStroke() {
-        // Cancel pending draw
-        cancelPendingDraw()
+    /// Cancel both pending and ongoing drags
+    private func cancelPendingAndOngoingDrag() {
+        cancelPendingDrag()
 
-        // Cancel ongoing stroke
-        if isDrawing {
-            isDrawing = false
-            onStrokeCancel?()  // Different from onStrokeEnd - triggers undo restore
+        if isDragging {
+            isDragging = false
+            onLineDragEnd?()
         }
     }
 
@@ -390,7 +278,6 @@ class GestureCoordinator: NSObject {
         switch gesture.state {
         case .changed:
             let center = gesture.location(in: view)
-            // Free rotation, no snapping
             onRotation?(gesture.rotation, center)
             gesture.rotation = 0
         case .ended, .cancelled:
@@ -402,7 +289,6 @@ class GestureCoordinator: NSObject {
 
     @objc private func handleTwoFingerTap(_ gesture: UITapGestureRecognizer) {
         if gesture.state == .recognized {
-            // Ignore if within cooldown period after pinch/rotation
             guard Date().timeIntervalSince(lastNavigationGestureTime) > undoCooldownPeriod else {
                 return
             }
@@ -412,7 +298,6 @@ class GestureCoordinator: NSObject {
 
     @objc private func handleThreeFingerTap(_ gesture: UITapGestureRecognizer) {
         if gesture.state == .recognized {
-            // Ignore if within cooldown period after pinch/rotation
             guard Date().timeIntervalSince(lastNavigationGestureTime) > undoCooldownPeriod else {
                 return
             }
@@ -429,7 +314,6 @@ extension GestureCoordinator: UIGestureRecognizerDelegate {
         _ gestureRecognizer: UIGestureRecognizer,
         shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
     ) -> Bool {
-        // Allow pan, pinch, and rotation to work together
         let navigationGestures: [UIGestureRecognizer?] = [
             panGesture, pinchGesture, rotationGesture
         ]
@@ -439,7 +323,6 @@ extension GestureCoordinator: UIGestureRecognizerDelegate {
             return true
         }
 
-        // Tap gestures should not block other gestures from being recognized
         let tapGestures: [UIGestureRecognizer?] = [
             twoFingerTapGesture, threeFingerTapGesture
         ]
@@ -457,7 +340,6 @@ extension GestureCoordinator: UIGestureRecognizerDelegate {
         _ gestureRecognizer: UIGestureRecognizer,
         shouldReceive touch: UITouch
     ) -> Bool {
-        // Only allow finger touches for navigation gestures
         return classifyTouch(touch) == .finger
     }
 }

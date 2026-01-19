@@ -65,15 +65,15 @@ struct DrawingCanvasView: UIViewRepresentable {
         view.gestureCoordinator = coordinator
         view.renderer = renderer
 
-        // Wire up callbacks
-        coordinator.onStrokeBegin = { [weak viewModel] point in
-            viewModel?.beginStroke(at: point)
+        // Wire up callbacks for line dragging
+        coordinator.onLineDragBegin = { [weak viewModel] point in
+            viewModel?.beginLineDrag(at: point)
         }
-        coordinator.onStrokeContinue = { [weak viewModel] point in
-            viewModel?.continueStroke(to: point)
+        coordinator.onLineDragContinue = { [weak viewModel] point in
+            viewModel?.continueLineDrag(to: point)
         }
-        coordinator.onStrokeEnd = { [weak viewModel] in
-            viewModel?.endStroke()
+        coordinator.onLineDragEnd = { [weak viewModel] in
+            viewModel?.endLineDrag()
         }
         coordinator.onPan = { [weak viewModel] delta in
             viewModel?.handlePanDelta(delta)
@@ -83,12 +83,6 @@ struct DrawingCanvasView: UIViewRepresentable {
         }
         coordinator.onRotation = { [weak viewModel] angle, center in
             viewModel?.handleRotationAt(angle: angle, center: center)
-        }
-        coordinator.onUndo = { [weak viewModel] in
-            viewModel?.undo()
-        }
-        coordinator.onRedo = { [weak viewModel] in
-            viewModel?.redo()
         }
 
         return view

@@ -1,15 +1,17 @@
 import SwiftUI
 
-/// Image navigation controls (◀ 12/128 ▶)
+/// Image navigation controls (◀ 12/128 ▶ 🗑)
 struct ImageNavigatorView: View {
     let currentIndex: Int
     let totalCount: Int
     let onPrevious: () -> Void
     let onNext: () -> Void
     var onGoTo: ((Int) -> Void)? = nil
+    var onDelete: (() -> Void)? = nil
 
     @State private var showingJumpPopover = false
     @State private var sliderValue: Double = 0
+    @State private var showingDeleteConfirmation = false
 
     private var displayIndex: Int {
         totalCount > 0 ? currentIndex + 1 : 0
@@ -54,11 +56,36 @@ struct ImageNavigatorView: View {
             }
             .buttonStyle(.plain)
             .disabled(currentIndex >= totalCount - 1)
+
+            // Delete button (if callback provided)
+            if onDelete != nil {
+                Divider()
+                    .frame(height: 24)
+                    .background(Color.gray.opacity(0.5))
+
+                Button(action: {
+                    showingDeleteConfirmation = true
+                }) {
+                    Image(systemName: "trash")
+                        .font(.title3)
+                        .foregroundColor(totalCount > 0 ? .red.opacity(0.8) : .gray)
+                }
+                .buttonStyle(.plain)
+                .disabled(totalCount == 0)
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
         .background(Color(white: 0.2))
         .cornerRadius(8)
+        .alert("Delete Image?", isPresented: $showingDeleteConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete", role: .destructive) {
+                onDelete?()
+            }
+        } message: {
+            Text("This will delete the image and its annotation data. This cannot be undone.")
+        }
     }
 
     // MARK: - Jump Popover Content
@@ -120,7 +147,8 @@ struct ImageNavigatorView: View {
         totalCount: 128,
         onPrevious: {},
         onNext: {},
-        onGoTo: { index in print("Go to: \(index)") }
+        onGoTo: { index in print("Go to: \(index)") },
+        onDelete: { print("Delete") }
     )
     .background(Color(white: 0.1))
 }

@@ -1,33 +1,15 @@
 import SwiftUI
 
-/// Slide-in overlay panel for image and mask settings
-/// Contains contrast, brightness, mask opacity, SAM model selection, and class name editing
+/// Slide-in overlay panel for image settings
+/// Contains contrast and brightness adjustments
 struct ImageSettingsOverlayView: View {
     @Binding var isPresented: Bool
     @Binding var imageContrast: Float
     @Binding var imageBrightness: Float
-    @Binding var maskFillAlpha: Float
-    @Binding var maskEdgeAlpha: Float
-    @Binding var smoothKernelSize: Int
-    @Binding var selectedSAMModel: SAMModelType
-    @Binding var classNames: [String]
-    var onClearClassNames: () -> Void
-
-    /// Preset colors for class editing display (must match MetalRenderer.classColors)
-    private let presetColors: [Color] = [
-        Color(red: 1, green: 0, blue: 0),        // 1: red
-        Color(red: 1, green: 0.5, blue: 0),      // 2: orange
-        Color(red: 1, green: 1, blue: 0),        // 3: yellow
-        Color(red: 0, green: 1, blue: 0),        // 4: green
-        Color(red: 0, green: 1, blue: 1),        // 5: cyan
-        Color(red: 0, green: 0, blue: 1),        // 6: blue
-        Color(red: 0.5, green: 0, blue: 1),      // 7: purple
-        Color(red: 1, green: 0.4, blue: 0.7)     // 8: pink
-    ]
 
     var body: some View {
         HStack(spacing: 0) {
-            // Pass-through area (allows drawing on canvas)
+            // Pass-through area (allows interaction with canvas)
             Color.clear
                 .allowsHitTesting(false)
 
@@ -78,22 +60,6 @@ struct ImageSettingsOverlayView: View {
                             displaySuffix: ""
                         )
 
-                        SettingsSliderView(
-                            title: "Mask Fill",
-                            value: $maskFillAlpha,
-                            range: 0...1,
-                            displayFormatter: { Int($0 * 100) },
-                            displaySuffix: "%"
-                        )
-
-                        SettingsSliderView(
-                            title: "Edge Fill",
-                            value: $maskEdgeAlpha,
-                            range: 0...1,
-                            displayFormatter: { Int($0 * 100) },
-                            displaySuffix: "%"
-                        )
-
                         // Reset button
                         Button(action: resetImageSettings) {
                             HStack {
@@ -114,131 +80,32 @@ struct ImageSettingsOverlayView: View {
                         .background(Color.gray.opacity(0.5))
                         .padding(.horizontal, 16)
 
-                    // Smooth settings section
-                    VStack(spacing: 12) {
-                        Text("Smooth Tool")
-                            .font(.caption)
-                            .foregroundColor(.gray)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 16)
-
-                        IntSettingsSliderView(
-                            title: "Kernel Size",
-                            value: $smoothKernelSize,
-                            range: 7...31,
-                            step: 2  // Ensure odd numbers
-                        )
-
-                        Text("Larger = smoother edges")
-                            .font(.caption2)
-                            .foregroundColor(.gray.opacity(0.7))
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 16)
-                    }
-
-                    Divider()
-                        .background(Color.gray.opacity(0.5))
-                        .padding(.horizontal, 16)
-
-                    // SAM Model section
-                    VStack(spacing: 12) {
-                        Text("SAM Model")
-                            .font(.caption)
-                            .foregroundColor(.gray)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 16)
-
-                        VStack(spacing: 8) {
-                            ForEach(SAMModelType.allCases) { modelType in
-                                Button(action: {
-                                    selectedSAMModel = modelType
-                                }) {
-                                    HStack {
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text(modelType.displayName)
-                                                .font(.caption)
-                                                .foregroundColor(.white)
-                                            Text(modelType.description)
-                                                .font(.caption2)
-                                                .foregroundColor(.gray)
-                                        }
-                                        Spacer()
-                                        if selectedSAMModel == modelType {
-                                            Image(systemName: "checkmark.circle.fill")
-                                                .foregroundColor(.cyan)
-                                        }
-                                    }
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 8)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .fill(selectedSAMModel == modelType ? Color.cyan.opacity(0.2) : Color(white: 0.2))
-                                    )
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .stroke(selectedSAMModel == modelType ? Color.cyan : Color.clear, lineWidth: 1)
-                                    )
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                        .padding(.horizontal, 16)
-
-                        Text("Model change takes effect on next SAM activation")
-                            .font(.caption2)
-                            .foregroundColor(.gray.opacity(0.7))
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 16)
-                    }
-
-                    Divider()
-                        .background(Color.gray.opacity(0.5))
-                        .padding(.horizontal, 16)
-
-                    // Class names section
+                    // Line annotation info section
                     VStack(spacing: 8) {
-                        HStack {
-                            Text("Class Names")
-                                .font(.caption)
-                                .foregroundColor(.gray)
-                            Spacer()
-                            Button(action: onClearClassNames) {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "trash")
-                                        .font(.caption2)
-                                    Text("Clear")
-                                        .font(.caption2)
-                                }
-                                .foregroundColor(.red.opacity(0.8))
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color(white: 0.2))
-                                .cornerRadius(4)
-                            }
-                            .buttonStyle(.plain)
+                        Text("Line Annotation")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 16)
+
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Tap a line in the right panel to select it")
+                                .font(.caption2)
+                                .foregroundColor(.gray.opacity(0.8))
+
+                            Text("Drag on the canvas to move the selected line")
+                                .font(.caption2)
+                                .foregroundColor(.gray.opacity(0.8))
+
+                            Text("Vertical lines: drag left/right")
+                                .font(.caption2)
+                                .foregroundColor(.gray.opacity(0.8))
+
+                            Text("Horizontal lines: drag up/down")
+                                .font(.caption2)
+                                .foregroundColor(.gray.opacity(0.8))
                         }
                         .padding(.horizontal, 16)
-
-                        VStack(spacing: 6) {
-                            ForEach(0..<8, id: \.self) { index in
-                                HStack(spacing: 8) {
-                                    // Color indicator
-                                    Circle()
-                                        .fill(presetColors[index])
-                                        .frame(width: 16, height: 16)
-
-                                    // Editable text field
-                                    TextField("Class \(index + 1)", text: $classNames[index])
-                                        .font(.caption)
-                                        .foregroundColor(.white)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 6)
-                                        .background(Color(white: 0.2))
-                                        .cornerRadius(6)
-                                }
-                                .padding(.horizontal, 16)
-                            }
-                        }
                     }
 
                     Spacer()
@@ -254,8 +121,6 @@ struct ImageSettingsOverlayView: View {
         withAnimation(.easeOut(duration: 0.2)) {
             imageContrast = 1.0
             imageBrightness = 0.0
-            maskFillAlpha = 0.5
-            maskEdgeAlpha = 1.0
         }
     }
 }
@@ -292,7 +157,7 @@ struct SettingsSliderView: View {
                         .fill(Color(white: 0.3))
                         .frame(height: 8)
 
-                    // Filled portion (handle center position for value)
+                    // Filled portion
                     let normalizedValue = (value - range.lowerBound) / (range.upperBound - range.lowerBound)
                     let centerPosition = range.contains(0) ? -range.lowerBound / (range.upperBound - range.lowerBound) : 0
 
@@ -334,69 +199,6 @@ struct SettingsSliderView: View {
     }
 }
 
-// MARK: - Int Settings Slider Component
-
-/// Horizontal slider for integer values with step control
-struct IntSettingsSliderView: View {
-    let title: String
-    @Binding var value: Int
-    let range: ClosedRange<Int>
-    let step: Int
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Title and value
-            HStack {
-                Text(title)
-                    .font(.caption)
-                    .foregroundColor(.gray)
-                Spacer()
-                Text("\(value)px")
-                    .font(.caption)
-                    .foregroundColor(.white)
-                    .monospacedDigit()
-            }
-
-            // Slider track
-            GeometryReader { geometry in
-                ZStack(alignment: .leading) {
-                    // Track background
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Color(white: 0.3))
-                        .frame(height: 8)
-
-                    // Filled portion
-                    let normalizedValue = Float(value - range.lowerBound) / Float(range.upperBound - range.lowerBound)
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Color.orange.opacity(0.6))
-                        .frame(width: geometry.size.width * CGFloat(normalizedValue), height: 8)
-
-                    // Thumb
-                    Circle()
-                        .fill(Color.white)
-                        .frame(width: 20, height: 20)
-                        .shadow(radius: 2)
-                        .offset(x: geometry.size.width * CGFloat(normalizedValue) - 10)
-                }
-                .contentShape(Rectangle())
-                .gesture(
-                    DragGesture(minimumDistance: 0)
-                        .onChanged { gestureValue in
-                            let normalized = gestureValue.location.x / geometry.size.width
-                            let clamped = min(max(normalized, 0), 1)
-                            let rawValue = Float(range.lowerBound) + Float(clamped) * Float(range.upperBound - range.lowerBound)
-                            // Snap to step
-                            let stepped = Int(round(rawValue / Float(step))) * step
-                            value = min(max(stepped, range.lowerBound), range.upperBound)
-                        }
-                )
-            }
-            .frame(height: 20)
-        }
-        .padding(.horizontal, 16)
-    }
-}
-
 // MARK: - Preview
 
 #Preview {
@@ -405,13 +207,7 @@ struct IntSettingsSliderView: View {
         ImageSettingsOverlayView(
             isPresented: .constant(true),
             imageContrast: .constant(1.0),
-            imageBrightness: .constant(0.0),
-            maskFillAlpha: .constant(0.5),
-            maskEdgeAlpha: .constant(1.0),
-            smoothKernelSize: .constant(21),
-            selectedSAMModel: .constant(.tiny),
-            classNames: .constant(["iris", "eyelid", "sclera", "pupil", "", "", "", ""]),
-            onClearClassNames: {}
+            imageBrightness: .constant(0.0)
         )
     }
     .frame(width: 400, height: 600)

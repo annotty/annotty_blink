@@ -1,7 +1,7 @@
 import Foundation
 import CoreGraphics
 
-/// Coordinates export operations for all formats
+/// Coordinates export operations for blink annotations
 class ExportService {
     // MARK: - Singleton
 
@@ -10,8 +10,6 @@ class ExportService {
     // MARK: - Exporters
 
     private let pngExporter = PNGExporter()
-    private let cocoExporter = COCOExporter()
-    private let yoloExporter = YOLOExporter()
 
     // MARK: - Dependencies
 
@@ -23,75 +21,64 @@ class ExportService {
 
     // MARK: - Export
 
-    /// Export all selected formats
+    /// Export blink annotations as mask images
     /// - Parameters:
-    ///   - masks: Dictionary of class ID to mask
-    ///   - classes: Class definitions
-    ///   - imageURL: Source image URL
-    ///   - imageSize: Original image size
-    ///   - scaleFactor: Scale factor from image to mask
-    ///   - formats: Formats to export
+    ///   - annotations: Dictionary of image name to annotation
+    ///   - imageURLs: Source image URLs
+    ///   - mode: Export mode (maskOnly, jsonOnly)
     /// - Returns: URLs of exported files
-    func export(
-        masks: [Int: InternalMask],
-        classes: [MaskClass],
-        imageURL: URL,
-        imageSize: CGSize,
-        scaleFactor: Float,
-        formats: Set<ExportFormat>
+    func exportBlinkAnnotations(
+        annotations: [String: BlinkAnnotation],
+        imageURLs: [URL],
+        mode: BlinkExportMode
     ) throws -> [URL] {
         var exportedURLs: [URL] = []
-        let imageName = imageURL.lastPathComponent
 
-        // Export PNG
-        if formats.contains(.png) {
-            let pngData = pngExporter.export(
-                masks: masks,
-                classes: classes,
-                imageSize: imageSize,
-                mode: .colorMask,
-                scaleFactor: scaleFactor
-            )
-
-            for (filename, data) in pngData {
-                if let url = projectService.getLabelURL(for: imageURL, format: .png) {
-                    try data.write(to: url)
-                    exportedURLs.append(url)
-                }
-            }
+        guard let labelsDir = projectService.labelsURL else {
+            throw ExportError.outputDirectoryNotFound
         }
 
-        // Export COCO
-        if formats.contains(.coco) {
-            if let cocoData = cocoExporter.export(
-                masks: masks,
-                classes: classes,
-                imageName: imageName,
-                imageSize: imageSize,
-                scaleFactor: scaleFactor
-            ) {
-                if let url = projectService.getLabelURL(for: imageURL, format: .coco) {
-                    try cocoData.write(to: url)
-                    exportedURLs.append(url)
-                }
-            }
-        }
+        // Create output directory
+        try FileManager.default.createDirectory(at: labelsDir, withIntermediateDirectories: true)
 
-        // Export YOLO
-        if formats.contains(.yolo) {
-            if let yoloData = yoloExporter.export(
-                masks: masks,
-                classes: classes,
-                imageSize: imageSize,
-                scaleFactor: scaleFactor
-            ) {
-                if let url = projectService.getLabelURL(for: imageURL, format: .yolo) {
-                    try yoloData.write(to: url)
-                    exportedURLs.append(url)
-                }
+        // Export mask images if not JSON-only mode
+        if mode != .jsonOnly {
+            for imageURL in imageURLs {
+                let baseName = imageURL.deletingPathExtension().lastPathComponent
+
+                // Skip images without annotations
+                guard let annotation = annotations[baseName] else { continue }
+
+                // Output as {basename}_label.png
+                let outputURL = labelsDir.appendingPathComponent("\(baseName)_label.png")
+
+                try pngExporter.exportMask(
+                    imageURL: imageURL,
+                    annotation: annotation,
+                    outputURL: outputURL
+                )
+
+                exportedURLs.append(outputURL)
             }
         }
 
         return exportedURLs
+    }
+
+    /// Export annotations as JSON
+    func exportAnnotationsJSON(annotations: [String: BlinkAnnotation]) throws -> URL {
+        guard let labelsDir = projectService.labelsURL else {
+            throw ExportError.outputDirectoryNotFound
+        }
+
+        let jsonURL = labelsDir.appendingPathComponent("blink_annotations.json")
+        let annotationArray = annotations.values.sorted { $0.imageName < $1.imageName }
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let jsonData = try encoder.encode(annotationArray)
+        try jsonData.write(to: jsonURL)
+
+        return jsonURL
     }
 }

@@ -14,6 +14,7 @@ struct TopBarView: View {
     let onExport: () -> Void
     let onLoad: () -> Void
     let onReload: () -> Void
+    var onDeleteImage: (() -> Void)? = nil
 
     var body: some View {
         HStack {
@@ -49,7 +50,8 @@ struct TopBarView: View {
                 totalCount: totalCount,
                 onPrevious: onPrevious,
                 onNext: onNext,
-                onGoTo: onGoTo
+                onGoTo: onGoTo,
+                onDelete: onDeleteImage
             )
 
             // Loading/Saving indicator (fixed width to prevent layout shift)
@@ -133,6 +135,7 @@ struct TopBarView: View {
         onClear: {},
         onExport: {},
         onLoad: {},
-        onReload: {}
+        onReload: {},
+        onDeleteImage: {}
     )
 }

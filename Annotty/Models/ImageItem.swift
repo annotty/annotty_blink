@@ -130,5 +130,52 @@ class ImageItemManager: ObservableObject {
         guard index >= 0 && index < items.count else { return }
         currentIndex = index
     }
+
+    /// Append images to the end of the list (preserves existing order)
+    func appendImages(_ urls: [URL]) {
+        let existingBaseNames = Set(items.map { $0.baseName })
+
+        let newItems = urls
+            .filter { !existingBaseNames.contains($0.deletingPathExtension().lastPathComponent) }
+            .map { url -> ImageItem in
+                var item = ImageItem(url: url)
+                if let annotationURL = ProjectFileService.shared.getAnnotationURL(for: url),
+                   FileManager.default.fileExists(atPath: annotationURL.path) {
+                    item.hasAnnotation = true
+                    item.annotationURL = annotationURL
+                }
+                return item
+            }
+
+        items.append(contentsOf: newItems)
+
+        // If this was the first image, set current index to 0
+        if currentIndex < 0 && !items.isEmpty {
+            currentIndex = 0
+        }
+    }
+
+    /// Remove image at specific index
+    func removeImage(at index: Int) -> ImageItem? {
+        guard index >= 0 && index < items.count else { return nil }
+
+        let removedItem = items.remove(at: index)
+
+        // Adjust current index if needed
+        if items.isEmpty {
+            currentIndex = 0
+        } else if currentIndex >= items.count {
+            currentIndex = items.count - 1
+        } else if currentIndex > index {
+            currentIndex -= 1
+        }
+
+        return removedItem
+    }
+
+    /// Get index of image by base name
+    func index(of baseName: String) -> Int? {
+        items.firstIndex { $0.baseName == baseName }
+    }
 }
 

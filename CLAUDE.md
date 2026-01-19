@@ -6,55 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Annotty is a professional iPad segmentation annotation app designed for machine learning data preparation. It provides an intuitive drawing experience using Apple Pencil for creating pixel-perfect segmentation masks.
 
-**Repository:** https://github.com/annotty/annotty
-**Target Platform:** iPadOS (Apple Pencil required)
+**Target Platform:** iPadOS 17+ (Apple Pencil required)
 **Tech Stack:** SwiftUI + Metal (no external dependencies)
 
-**Tagline:** Professional iPad annotation tool with Apple Pencil — intuitive drawing meets smart segmentation.
-
-## Current Status (2025-01)
-
-### Implemented Features
-
-| Feature | Status | Description |
-|---------|--------|-------------|
-| **Paint/Erase** | ✅ Complete | Apple Pencil drawing with adjustable brush size |
-| **Flood Fill** | ✅ Complete | One-tap fill for enclosed regions |
-| **Boundary Smoothing** | ✅ Complete | Competition-based moving average algorithm |
-| **SAM 2.1 Integration** | ✅ Complete | Point prompt and box prompt segmentation |
-| **Multi-class Support** | ✅ Complete | Up to 8 classes with custom names |
-| **Export** | ✅ Complete | PNG, COCO JSON, YOLO-seg formats |
-| **Undo/Redo** | ✅ Complete | 2-finger tap / 3-finger tap |
-| **Pan/Zoom/Rotate** | ✅ Complete | 2-finger gestures |
-
-### Architecture
-
-```
-User Input (Apple Pencil / Gestures)
-    ↓
-GestureCoordinator (Gestures/) → filters pencil vs finger input
-    ↓
-CanvasViewModel (ViewModels/) → state orchestration & tool logic
-    ↓
-MetalRenderer + TextureManager (Metal/) → GPU pipelines
-    ↓
-Shaders.metal → brush stamp, mask compositing
-    ↓
-Display (SwiftUI overlay + Metal rendering)
-```
-
-### Key Components
-
-| File | Purpose |
-|------|---------|
-| `CanvasViewModel.swift` | Main state coordinator: drawing, fill, smooth, SAM, undo/redo |
-| `MetalRenderer.swift` | Metal pipeline setup & rendering |
-| `TextureManager.swift` | GPU texture management for images & masks |
-| `GestureCoordinator.swift` | Input classification & gesture routing |
-| `CanvasTransform.swift` | Pan/zoom/rotation matrix with coordinate transforms |
-| `SAM2Service.swift` | SAM 2.1 CoreML inference service |
-
-## Build & Development
+## Build Commands
 
 ```bash
 # Open in Xcode
@@ -67,107 +22,139 @@ xcodebuild -scheme Annotty -destination 'platform=iOS Simulator,name=iPad Pro 13
 xcodebuild test -scheme Annotty -destination 'platform=iOS Simulator,name=iPad Pro 13-inch (M5)'
 ```
 
-## Project Structure
+## Architecture
+
+### Data Flow
 
 ```
-Annotty/
-├── App/                    # App entry point
-├── Models/                 # Data models (CanvasTransform, UndoAction, etc.)
-├── Views/
-│   ├── MainView.swift
-│   ├── CanvasView/         # MetalCanvasView, SmoothStrokeOverlay
-│   ├── LeftPanel/          # Brush size slider
-│   ├── RightPanel/         # Tools, colors, settings
-│   └── TopBar/             # Navigation, export
-├── ViewModels/
-│   ├── CanvasViewModel.swift  # Central state management
-│   └── UndoManager.swift
-├── Metal/
-│   ├── MetalRenderer.swift
-│   ├── TextureManager.swift
-│   └── Shaders/
-├── Gestures/
-│   └── GestureCoordinator.swift
-├── Services/
-│   ├── FileManager/        # Project I/O, auto-save
-│   ├── Export/             # PNG, COCO, YOLO
-│   ├── ImageProcessing/    # Color parsing, contours
-│   └── SAM/                # SAM 2.1 integration
-│       ├── SAM2Service.swift
-│       └── Models/         # CoreML models (.mlpackage)
-└── Utils/
+User Input (Apple Pencil / Gestures)
+    ↓
+GestureCoordinator (filters pencil vs finger, 32ms finger delay)
+    ↓
+CanvasViewModel (state orchestration, tool logic, undo/redo)
+    ↓
+MetalRenderer + TextureManager (GPU pipelines, texture management)
+    ↓
+Shaders.metal (brush stamp compute, mask compositing fragment)
+    ↓
+Display (MTKView + SwiftUI overlays)
 ```
+
+### Key Components
+
+| File | Responsibility |
+|------|----------------|
+| `CanvasViewModel.swift` | Central state coordinator. Manages drawing, fill, smooth, SAM modes. Handles undo/redo stack, image navigation, mask save/load. ~1900 lines. |
+| `MetalRenderer.swift` | Metal pipeline setup. Render pipeline for canvas display, compute pipelines for brush stamps and mask clearing. |
+| `TextureManager.swift` | GPU texture lifecycle. Manages image texture loading, mask texture creation at 2x resolution (max 4096px). |
+| `GestureCoordinator.swift` | Input classification (pencil vs finger). Implements 32ms delay for finger drawing to allow 2-finger gesture detection. |
+| `CanvasTransform.swift` | Coordinate transform matrix. Handles pan/zoom/rotate with screen-to-mask coordinate conversion. |
+| `SAM2Service.swift` | SAM 2.1 CoreML inference. Supports Tiny (~11M params) and Small (~38M params) models with image embedding caching. |
+
+### Mask System
+
+- **Internal Format:** `UInt8` buffer with `MTLPixelFormat.r8Uint`
+- **Value Range:** 0 = background, 1-8 = class IDs
+- **Resolution:** 2x source image (clamped to 4096px max)
+- **Persistence:** Color PNG in `annotations/` folder (class colors mapped to RGB)
+
+### Class Colors (Must Match Exactly)
+
+Class colors are defined in both `CanvasViewModel.classRGBColors` (for PNG save/load) and `MetalRenderer.classColors` (for GPU rendering):
+
+| ClassID | Color | RGB |
+|---------|-------|-----|
+| 1 | Red | (255, 0, 0) |
+| 2 | Orange | (255, 128, 0) |
+| 3 | Yellow | (255, 255, 0) |
+| 4 | Green | (0, 255, 0) |
+| 5 | Cyan | (0, 255, 255) |
+| 6 | Blue | (0, 0, 255) |
+| 7 | Purple | (128, 0, 255) |
+| 8 | Pink | (255, 102, 178) |
+
+### Coordinate Spaces
+
+1. **Touch coordinates:** UIKit points (logical pixels)
+2. **Screen coordinates:** Physical pixels (`touch × contentScaleFactor`)
+3. **Image coordinates:** Original image pixels
+4. **Mask coordinates:** Mask texture pixels (`image × maskScaleFactor`)
+
+Conversions flow through `CanvasTransform`:
+- `screenToMask()` for drawing operations
+- `screenToImage()` for SAM predictions
+- Transform matrix applies pan, zoom, rotation
+
+### Gesture System
+
+The `GestureCoordinator` implements a critical 32ms delay for finger input:
+- **Pencil:** Draws immediately (no delay)
+- **Finger:** Waits 32ms before starting stroke
+- **2+ fingers within 32ms:** Cancels pending stroke, enables navigation
+- **2-finger tap:** Undo (with 300ms cooldown after navigation)
+- **3-finger tap:** Redo
+
+Tool modes (`isFillMode`, `isSAMMode`, `isSmoothMode`) are mutually exclusive.
+
+### Undo System
+
+Undo patches capture mask regions before modification:
+- Large initial bbox (2000×2000 or texture size) to minimize expansion
+- `UndoAction` stores: classID, bbox, previousPatch (Data)
+- Expansion uses compositing to merge original + new regions
+
+### SAM Integration
+
+SAM 2.1 runs three CoreML models in sequence:
+1. **ImageEncoder:** 1024×1024 input → image embedding (cached)
+2. **PromptEncoder:** Points/labels → sparse/dense embeddings
+3. **MaskDecoder:** Embeddings → 256×256 low-res masks (3 candidates)
+
+Point labels: 1=foreground, 0=background, 2=bbox top-left, 3=bbox bottom-right
+
+### QuickLine Feature
+
+Hold pencil stationary for 1 second to convert freehand stroke to straight line:
+- Detects movement < 5pt threshold
+- Restores original patch, redraws as interpolated line
 
 ## Runtime Folder Structure
 
 ```
-YourProject/
+Documents/
 ├── images/          # Source images (PNG, JPG)
-├── annotations/     # Editable color masks (auto-saved)
-└── labels/          # Exported ML-ready labels
+├── annotations/     # Color mask PNGs (auto-saved)
+└── labels/          # Exported ML labels (COCO/YOLO)
 ```
 
-## Technical Specifications
+## Critical Implementation Notes
 
-### Internal Mask
-- Resolution: **2x source image (max 4096px)**
-- Format: `UInt8` buffer, `MTLPixelFormat.r8Uint`
-- Max classes: **8**
+### Metal Struct Alignment
 
-### Smoothing Algorithm
-- **Competition-based moving average**
-- Kernel size: 7-31px (configurable in Settings)
-- 2-pass application for smooth results
-- Handles class-to-class and class-to-background boundaries
+`CanvasUniforms` must match Metal shader exactly. Use `MemoryLayout<T>.stride` not `.size` for buffer allocation.
 
-### SAM 2.1 Models
-- **Tiny**: Faster, lower memory
-- **Small**: More accurate
-- Models included in `Services/SAM/Models/`
+### Thread Safety
 
-## Gesture Mapping
+- GPU texture reads (`getBytes`) block until complete
+- Background saves capture mask data on main thread, write on background
+- SAM predictions use `@MainActor` for UI state updates
 
-| Input | Action |
-|-------|--------|
-| Apple Pencil | Paint / Erase / Tool action |
-| 2-finger drag | Pan |
-| 2-finger pinch | Zoom |
-| 2-finger rotate | Rotate |
-| 2-finger tap | Undo |
-| 3-finger tap | Redo |
+### Auto-Save Triggers
 
-## OSS Scope & Strategy
+- Image navigation (immediate, blocking)
+- App backgrounding (`saveBeforeBackground()`)
+- NOT on stroke end (performance)
 
-### In Scope (This Repository)
-- All annotation tools (Paint, Fill, Smooth, SAM)
-- Local file management
-- Export formats (PNG, COCO, YOLO)
-- On-device AI (SAM 2.1)
+## Export Formats
 
-### Out of Scope (Separate Development)
-- Cloud services
-- User accounts
-- Team collaboration
-- Extended workflows
+| Format | Service | Output |
+|--------|---------|--------|
+| PNG | `PNGExporter` | Color masks at mask resolution |
+| COCO JSON | `COCOExporter` | Instance polygons via `ContourExtractor` |
+| YOLO-seg | `YOLOExporter` | Normalized polygon coordinates |
 
-**Note:** This is intentional. OSS focuses on the core annotation experience.
-Cloud and collaboration features are developed separately.
+## Development Notes
 
-## Future OSS Roadmap
-
-- [ ] Video annotation support
-- [ ] Additional export formats
-- [ ] Custom color palette
-
-## Licensing
-
-- **This project:** MIT License
-- **SAM 2.1 models:** Apache 2.0 (Meta Platforms, Inc.)
-
-See `THIRD_PARTY_NOTICES.md` for details.
-
-## Auto-Save Triggers
-
-- Stroke end (500ms debounce)
-- Image navigation (immediate)
-- App backgrounding (immediate)
+- Simulator testing: Finger input works for all tools (no pencil required)
+- SAM models: Included in `Services/SAM/Models/` (~80MB total)
+- No unit tests currently configured

@@ -23,6 +23,9 @@ class ProjectFileService {
     private(set) var annotationsFolder: URL?
     private(set) var labelsFolder: URL?
 
+    /// Convenience accessor for labels URL
+    var labelsURL: URL? { labelsFolder }
+
     // MARK: - File Manager
 
     private let fileManager = FileManager.default
@@ -163,6 +166,31 @@ class ProjectFileService {
 
         try fileManager.copyItem(at: sourceURL, to: destinationURL)
         return destinationURL
+    }
+
+    // MARK: - Delete Image
+
+    /// Delete an image and its associated annotation file
+    func deleteImage(_ imageURL: URL) throws {
+        // Delete the image file
+        if fileManager.fileExists(atPath: imageURL.path) {
+            try fileManager.removeItem(at: imageURL)
+        }
+
+        // Delete the annotation file if it exists
+        if let annotationURL = getAnnotationURL(for: imageURL),
+           fileManager.fileExists(atPath: annotationURL.path) {
+            try fileManager.removeItem(at: annotationURL)
+        }
+
+        // Delete the label file if it exists
+        if let labelsFolder = labelsFolder {
+            let baseName = imageURL.deletingPathExtension().lastPathComponent
+            let labelURL = labelsFolder.appendingPathComponent("\(baseName)_label.png")
+            if fileManager.fileExists(atPath: labelURL.path) {
+                try fileManager.removeItem(at: labelURL)
+            }
+        }
     }
 }
 
