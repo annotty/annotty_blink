@@ -18,11 +18,11 @@ struct TopBarView: View {
 
     var body: some View {
         HStack {
-            // Load button
+            // Import button
             Button(action: onLoad) {
                 HStack(spacing: 4) {
                     Image(systemName: "folder")
-                    Text("Load")
+                    Text("Import")
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)

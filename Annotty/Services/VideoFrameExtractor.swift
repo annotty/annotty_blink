@@ -73,6 +73,9 @@ class VideoFrameExtractor {
         let totalFrames = frameTimes.count
         print("[VideoFrameExtractor] Extracting \(totalFrames) frames at \(fps) FPS from \(String(format: "%.1f", durationSeconds))s video")
 
+        // Get video basename for frame naming
+        let videoBasename = videoURL.deletingPathExtension().lastPathComponent
+
         // Create output directory
         let outputDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("extracted_frames_\(UUID().uuidString)")
@@ -86,9 +89,9 @@ class VideoFrameExtractor {
             do {
                 let cgImage = try imageGenerator.copyCGImage(at: time, actualTime: nil)
 
-                // Save as PNG
+                // Save as PNG with format: {videoBasename}_frame{number}.png
                 let frameNumber = String(format: "%05d", index)
-                let frameURL = outputDir.appendingPathComponent("frame_\(frameNumber).png")
+                let frameURL = outputDir.appendingPathComponent("\(videoBasename)_frame\(frameNumber).png")
 
                 if saveCGImageAsPNG(cgImage, to: frameURL) {
                     extractedURLs.append(frameURL)
@@ -126,6 +129,9 @@ class VideoFrameExtractor {
         imageGenerator.requestedTimeToleranceBefore = CMTime(seconds: 0.01, preferredTimescale: 600)
         imageGenerator.requestedTimeToleranceAfter = CMTime(seconds: 0.01, preferredTimescale: 600)
 
+        // Get video basename for frame naming
+        let videoBasename = videoURL.deletingPathExtension().lastPathComponent
+
         let outputDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("extracted_frames_\(UUID().uuidString)")
 
@@ -140,8 +146,9 @@ class VideoFrameExtractor {
             do {
                 let cgImage = try imageGenerator.copyCGImage(at: cmTime, actualTime: nil)
 
+                // Save as PNG with format: {videoBasename}_frame{number}.png
                 let frameNumber = String(format: "%05d", index)
-                let frameURL = outputDir.appendingPathComponent("frame_\(frameNumber).png")
+                let frameURL = outputDir.appendingPathComponent("\(videoBasename)_frame\(frameNumber).png")
 
                 if saveCGImageAsPNG(cgImage, to: frameURL) {
                     extractedURLs.append(frameURL)

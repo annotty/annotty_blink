@@ -124,25 +124,10 @@ class macOSInputCoordinator: NSObject, InputCoordinatorProtocol {
         }
     }
 
-    /// Handle magnification event (Pinch gesture from trackpad)
-    func magnify(with event: NSEvent) {
-        guard let view = view else { return }
-        
-        // event.magnification is the change in scale (e.g. 0.01)
-        // We want a multiplier: 1.0 + magnification
-        let scale = 1.0 + event.magnification
-        let location = view.convert(event.locationInWindow, from: nil)
-        
-        print("[Input] magnify event: scale \(scale)")
-        onPinch?(scale, location)
-        lastNavigationGestureTime = Date()
-    }
-
     /// Handle scroll wheel event
     /// Default: Vertical scroll = Zoom, Horizontal scroll = Pan
     /// Option key: Rotation
     func scrollWheel(with event: NSEvent) {
-        print("[Input] scrollWheel raw deltaY: \(event.scrollingDeltaY)")
         guard let view = view else { return }
 
         let location = view.convert(event.locationInWindow, from: nil)
@@ -163,10 +148,9 @@ class macOSInputCoordinator: NSObject, InputCoordinatorProtocol {
             let deltaX = event.scrollingDeltaX
 
             // Vertical scroll → Zoom (swipe up = zoom in, swipe down = zoom out)
-            if abs(deltaY) > 0.01 { // Lowered threshold from 0.1
-                let zoomDelta = deltaY * 0.05 // Increased sensitivity from 0.01
+            if abs(deltaY) > 0.1 {
+                let zoomDelta = deltaY * 0.01
                 let scale = 1.0 + zoomDelta
-                print("[Input] Pinching with scale: \(scale) from deltaY: \(deltaY)")
                 onPinch?(scale, location)
             }
 

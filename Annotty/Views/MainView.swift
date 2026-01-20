@@ -82,8 +82,8 @@ struct MainView: View {
                 onFolderSelected: { url in
                     viewModel.importImagesFromFolder(url)
                 },
-                onProjectSelected: { url in
-                    viewModel.openProject(at: url)
+                onAnnotationFileSelected: { url in
+                    viewModel.importAnnotationFile(from: url)
                 },
                 onVideoSelected: { url in
                     // Video import will be handled in Phase 7
@@ -93,6 +93,13 @@ struct MainView: View {
         }
         .sheet(isPresented: $showingExportSheet) {
             ExportSheetView(viewModel: viewModel)
+        }
+        .alert("Import Result", isPresented: $viewModel.showImportResultAlert) {
+            Button("OK", role: .cancel) {
+                viewModel.importResultMessage = nil
+            }
+        } message: {
+            Text(viewModel.importResultMessage ?? "")
         }
         #if os(iOS)
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in

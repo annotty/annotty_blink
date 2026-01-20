@@ -185,23 +185,7 @@ class MouseMTKView: MTKView {
     }
 
     private func setupView() {
-        // Enable indirect touches for trackpad gestures (pinch/rotate)
-        if #available(macOS 10.12.2, *) {
-            allowedTouchTypes = [.indirect]
-            wantsRestingTouches = true
-        }
-        
-        // Initial tracking area setup
-        updateTrackingAreas()
-    }
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        
-        // Remove all existing tracking areas to avoid duplicates
-        trackingAreas.forEach { removeTrackingArea($0) }
-        
-        // Create new tracking area with current bounds
+        // Enable mouse tracking
         let trackingArea = NSTrackingArea(
             rect: bounds,
             options: [.activeInKeyWindow, .mouseMoved, .inVisibleRect],
@@ -209,10 +193,6 @@ class MouseMTKView: MTKView {
             userInfo: nil
         )
         addTrackingArea(trackingArea)
-    }
-    
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
-        return true
     }
 
     override var acceptsFirstResponder: Bool { true }
@@ -244,14 +224,7 @@ class MouseMTKView: MTKView {
     }
 
     override func scrollWheel(with event: NSEvent) {
-        print("[View] MouseMTKView received scrollWheel")
         inputCoordinator?.scrollWheel(with: event)
-    }
-    
-    override func magnify(with event: NSEvent) {
-        print("[View] MouseMTKView received magnify")
-        inputCoordinator?.magnify(with: event)
-        super.magnify(with: event)
     }
 
     // MARK: - Keyboard Events
@@ -297,7 +270,6 @@ struct MetalCanvasView: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: MouseMTKView, context: Context) {
-        // print("[View] MetalCanvasView updateNSView called - triggering display")
         nsView.needsDisplay = true
     }
 

@@ -12,13 +12,13 @@ struct ImagePickerView: View {
     let onImageSelected: (URL) -> Void
     let onImagesSelected: ([URL]) -> Void
     let onFolderSelected: (URL) -> Void
-    let onProjectSelected: (URL) -> Void
+    let onAnnotationFileSelected: (URL) -> Void
     let onVideoSelected: (URL) -> Void
 
     @State private var selectedItem: PhotosPickerItem?
     @State private var showingImagePicker = false
     @State private var showingFolderPicker = false
-    @State private var showingProjectPicker = false
+    @State private var showingAnnotationFilePicker = false
     @State private var showingVideoPicker = false
     @State private var showingFPSSelection = false
     @State private var selectedVideoURL: URL?
@@ -75,9 +75,9 @@ struct ImagePickerView: View {
                 dismiss()
             }
         }
-        .sheet(isPresented: $showingProjectPicker) {
-            DocumentPickerView(contentTypes: [.folder]) { url in
-                onProjectSelected(url)
+        .sheet(isPresented: $showingAnnotationFilePicker) {
+            DocumentPickerView(contentTypes: [.json]) { url in
+                onAnnotationFileSelected(url)
                 dismiss()
             }
         }
@@ -157,12 +157,12 @@ struct ImagePickerView: View {
                 .background(Color.gray)
                 .padding(.vertical, 10)
 
-            // Open Project
-            Button(action: { showingProjectPicker = true }) {
+            // Import Annotation File
+            Button(action: { showingAnnotationFilePicker = true }) {
                 HStack {
-                    Image(systemName: "folder.badge.gearshape")
+                    Image(systemName: "doc.text")
                         .font(.title2)
-                    Text("Open Project Folder")
+                    Text("Import Annotation File (JSON)")
                 }
                 .frame(maxWidth: .infinity)
                 .padding()
@@ -173,7 +173,7 @@ struct ImagePickerView: View {
 
             Spacer()
 
-            Text("Import: copy images to current project\nOpen Project: switch to different project")
+            Text("Import annotations for matching images\nMissing images will be skipped")
                 .font(.caption)
                 .foregroundColor(.gray)
                 .padding(.bottom, 20)
@@ -428,7 +428,7 @@ struct ImagePickerView: View {
     let onImageSelected: (URL) -> Void
     let onImagesSelected: ([URL]) -> Void
     let onFolderSelected: (URL) -> Void
-    let onProjectSelected: (URL) -> Void
+    let onAnnotationFileSelected: (URL) -> Void
     let onVideoSelected: (URL) -> Void
 
     @State private var showingFPSSelection = false
@@ -528,12 +528,12 @@ struct ImagePickerView: View {
                 .background(Color.gray)
                 .padding(.vertical, 10)
 
-            // Open Project
-            Button(action: { openProjectPanel() }) {
+            // Import Annotation File
+            Button(action: { openAnnotationFilePanel() }) {
                 HStack {
-                    Image(systemName: "folder.badge.gearshape")
+                    Image(systemName: "doc.text")
                         .font(.title2)
-                    Text("Open Project Folder")
+                    Text("Import Annotation File (JSON)")
                 }
                 .frame(maxWidth: .infinity)
                 .padding()
@@ -545,7 +545,7 @@ struct ImagePickerView: View {
 
             Spacer()
 
-            Text("Import: copy images to current project\nOpen Project: switch to different project")
+            Text("Import annotations for matching images\nMissing images will be skipped")
                 .font(.caption)
                 .foregroundColor(.gray)
                 .padding(.bottom, 20)
@@ -678,15 +678,16 @@ struct ImagePickerView: View {
         }
     }
 
-    private func openProjectPanel() {
+    private func openAnnotationFilePanel() {
         let panel = NSOpenPanel()
-        panel.title = "Open Project Folder"
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
+        panel.title = "Import Annotation File"
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
         panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.json]
 
         if panel.runModal() == .OK, let url = panel.url {
-            onProjectSelected(url)
+            onAnnotationFileSelected(url)
             dismiss()
         }
     }
@@ -765,7 +766,7 @@ struct ImagePickerView: View {
         onImageSelected: { url in print("Image: \(url)") },
         onImagesSelected: { urls in print("Images: \(urls.count)") },
         onFolderSelected: { url in print("Folder: \(url)") },
-        onProjectSelected: { url in print("Project: \(url)") },
+        onAnnotationFileSelected: { url in print("Annotation: \(url)") },
         onVideoSelected: { url in print("Video: \(url)") }
     )
 }

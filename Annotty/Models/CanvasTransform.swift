@@ -178,6 +178,30 @@ struct CanvasTransform {
         rotation = 0.0
     }
 
+    /// Center image at a specific scale (preserves zoom level across images)
+    /// - Parameters:
+    ///   - targetScale: The scale to apply
+    ///   - imageSize: Size of the image in pixels
+    ///   - viewSize: Size of the view in pixels
+    mutating func centerWithScale(_ targetScale: CGFloat, imageSize: CGSize, viewSize: CGSize) {
+        guard imageSize.width > 0 && imageSize.height > 0 &&
+              viewSize.width > 0 && viewSize.height > 0 else {
+            reset()
+            return
+        }
+
+        // Calculate translation to center the image at the given scale
+        let scaledWidth = imageSize.width * targetScale
+        let scaledHeight = imageSize.height * targetScale
+        let offsetX = (viewSize.width - scaledWidth) / 2
+        let offsetY = (viewSize.height - scaledHeight) / 2
+
+        // Apply transform with preserved scale
+        scale = targetScale
+        translation = CGPoint(x: offsetX, y: offsetY)
+        rotation = 0.0
+    }
+
     /// Convert to simd matrix for Metal shaders
     func toSimdMatrix() -> simd_float3x3 {
         let m = matrix

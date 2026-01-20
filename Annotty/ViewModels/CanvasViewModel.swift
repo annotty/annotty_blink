@@ -63,9 +63,9 @@ class CanvasViewModel: ObservableObject {
     @Published private(set) var currentImageIndex: Int = 0
     @Published private(set) var totalImageCount: Int = 0
 
-    /// Current image name (filename without extension) - used as annotation key
+    /// Current image name (filename with extension) - used as annotation key in JSON
     var currentImageName: String? {
-        imageManager.currentItem?.baseName
+        imageManager.currentItem?.fileName
     }
 
     // MARK: - Loading/Saving State
@@ -90,6 +90,12 @@ class CanvasViewModel: ObservableObject {
 
     /// Flag to track if annotation has been modified since last save
     private var annotationModified: Bool = false
+
+    /// Import result message (for displaying errors or success)
+    @Published var importResultMessage: String?
+
+    /// Show import result alert
+    @Published var showImportResultAlert: Bool = false
 
     /// UserDefaults key for last viewed image
     private static let lastImageNameKey = "annotty.lastImageName"
@@ -174,7 +180,7 @@ class CanvasViewModel: ObservableObject {
 
         // Resume from last viewed image if it still exists
         if let lastImageName = UserDefaults.standard.string(forKey: Self.lastImageNameKey),
-           let index = imageManager.items.firstIndex(where: { $0.baseName == lastImageName }) {
+           let index = imageManager.items.firstIndex(where: { $0.fileName == lastImageName }) {
             imageManager.goTo(index: index)
             print("[Project] Resuming from: \(lastImageName)")
         }
@@ -273,11 +279,94 @@ class CanvasViewModel: ObservableObject {
         }
     }
 
+    /// Import annotation file (JSON) and merge with existing annotations
+    ///
+    /// Expected JSON format: Array of BlinkAnnotation objects
+    /// - Matching images: Annotations are merged (imported overwrites existing)
+    /// - Missing images: Annotations are still imported (images may be added later)
+    /// - Invalid format: Shows error message
+    func importAnnotationFile(from url: URL) {
+        let didStartAccessing = url.startAccessingSecurityScopedResource()
+        defer {
+            if didStartAccessing {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        do {
+            let data = try Data(contentsOf: url)
+
+            // Validate JSON format
+            let decoder = JSONDecoder()
+            let importedAnnotations = try decoder.decode([BlinkAnnotation].self, from: data)
+
+            // Get list of currently loaded images
+            let imageNames = Set(imageManager.items.map { $0.fileName })
+
+            // Merge with existing annotations
+            var matchedCount = 0
+            var unmatchedCount = 0
+            for annotation in importedAnnotations {
+                annotations[annotation.imageName] = annotation
+                if imageNames.contains(annotation.imageName) {
+                    matchedCount += 1
+                } else {
+                    unmatchedCount += 1
+                }
+            }
+
+            // Update current annotation if it was imported
+            if let currentName = currentImageName,
+               let updatedAnnotation = annotations[currentName] {
+                currentAnnotation = updatedAnnotation
+            }
+
+            // Save merged annotations
+            saveAllAnnotations()
+
+            // Show success message
+            let message: String
+            if unmatchedCount > 0 {
+                message = "Imported \(importedAnnotations.count) annotations.\n(\(matchedCount) matched, \(unmatchedCount) without images)"
+            } else {
+                message = "Imported \(importedAnnotations.count) annotations."
+            }
+            importResultMessage = message
+            showImportResultAlert = true
+
+            print("[ImportAnnotation] \(message)")
+
+        } catch let decodingError as DecodingError {
+            // Invalid JSON format
+            let errorMessage: String
+            switch decodingError {
+            case .dataCorrupted(let context):
+                errorMessage = "Invalid JSON format: \(context.debugDescription)"
+            case .keyNotFound(let key, _):
+                errorMessage = "Missing required field: \(key.stringValue)"
+            case .typeMismatch(let type, let context):
+                errorMessage = "Type mismatch for \(type): \(context.debugDescription)"
+            case .valueNotFound(let type, _):
+                errorMessage = "Missing value for type: \(type)"
+            @unknown default:
+                errorMessage = "JSON parsing error: \(decodingError.localizedDescription)"
+            }
+            importResultMessage = errorMessage
+            showImportResultAlert = true
+            print("[ImportAnnotation] Error: \(errorMessage)")
+
+        } catch {
+            importResultMessage = "Failed to read file: \(error.localizedDescription)"
+            showImportResultAlert = true
+            print("[ImportAnnotation] Error: \(error)")
+        }
+    }
+
     /// Delete the current image and its annotation
     func deleteCurrentImage() {
         guard let item = imageManager.currentItem else { return }
 
-        let imageName = item.baseName
+        let imageName = item.fileName
 
         // Save any unsaved annotation first
         if annotationModified {
@@ -287,7 +376,7 @@ class CanvasViewModel: ObservableObject {
         do {
             // Delete the image file and associated files
             try ProjectFileService.shared.deleteImage(item.url)
-            print("[Delete] Deleted image: \(item.baseName)")
+            print("[Delete] Deleted image: \(item.fileName)")
 
             // Remove annotation from memory
             annotations.removeValue(forKey: imageName)
@@ -432,12 +521,15 @@ class CanvasViewModel: ObservableObject {
             saveCurrentAnnotation()
         }
 
+        // Preserve current scale before navigation
+        let preservedScale = currentScale
+
         // Navigate
         navigation()
-        loadCurrentImage()
+        loadCurrentImage(preservingScale: preservedScale)
     }
 
-    private func loadCurrentImage() {
+    private func loadCurrentImage(preservingScale: CGFloat? = nil) {
         guard let item = imageManager.currentItem else { return }
 
         isLoading = true
@@ -457,14 +549,18 @@ class CanvasViewModel: ObservableObject {
             // Reset line selection to first line (right pupil vertical)
             self.selectedLineType = .rightPupilVertical
 
-            // Fit image to view after loading
-            self.resetView()
+            // Fit image to view after loading (preserve scale during navigation)
+            if let scale = preservingScale {
+                self.applyScaleCentered(scale)
+            } else {
+                self.resetView()
+            }
 
             // Load or create annotation for this image
-            self.loadOrCreateAnnotation(for: item.baseName)
+            self.loadOrCreateAnnotation(for: item.fileName)
 
             // Save last viewed image name for resume
-            UserDefaults.standard.set(item.baseName, forKey: Self.lastImageNameKey)
+            UserDefaults.standard.set(item.fileName, forKey: Self.lastImageNameKey)
 
             self.isLoading = false
         }
@@ -635,7 +731,7 @@ class CanvasViewModel: ObservableObject {
             print("[ApplyPrevious] Failed: previousIndex out of bounds")
             return
         }
-        let previousName = imageManager.items[previousIndex].baseName
+        let previousName = imageManager.items[previousIndex].fileName
         print("[ApplyPrevious] previousName: \(previousName)")
         print("[ApplyPrevious] Available annotations: \(Array(annotations.keys))")
 
@@ -651,17 +747,35 @@ class CanvasViewModel: ObservableObject {
         }
     }
 
-    /// Load annotation for an image (does NOT create if not exists)
+    /// Load annotation for an image, auto-copying from previous if enabled
     ///
     /// Annotation loading behavior:
     /// 1. If existing annotation exists, use it
-    /// 2. Otherwise, set currentAnnotation to nil (annotation created on first canvas click)
+    /// 2. If auto-copy is ON and no annotation exists, copy from previous image
+    /// 3. Otherwise, set currentAnnotation to nil (annotation created on first canvas click)
     private func loadOrCreateAnnotation(for imageName: String) {
         // Use existing annotation if available
         if let existing = annotations[imageName] {
             currentAnnotation = existing
             print("[Annotation] Loaded existing for \(imageName)")
             return
+        }
+
+        // No annotation exists - this is a "new" image
+        // If auto-copy is enabled, copy from previous image immediately
+        if autoCopyPreviousAnnotation {
+            let previousIndex = currentImageIndex - 1
+            if previousIndex >= 0 && previousIndex < imageManager.items.count {
+                let previousName = imageManager.items[previousIndex].fileName
+                if let previous = annotations[previousName] {
+                    var inherited = previous
+                    inherited.imageName = imageName
+                    currentAnnotation = inherited
+                    annotations[imageName] = inherited
+                    print("[Annotation] Auto-copied from \(previousName) to \(imageName)")
+                    return
+                }
+            }
         }
 
         // No annotation yet - will be created on first canvas interaction
@@ -680,7 +794,7 @@ class CanvasViewModel: ObservableObject {
         if autoCopyPreviousAnnotation {
             let previousIndex = currentImageIndex - 1
             if previousIndex >= 0 && previousIndex < imageManager.items.count {
-                let previousName = imageManager.items[previousIndex].baseName
+                let previousName = imageManager.items[previousIndex].fileName
                 if let previous = annotations[previousName] {
                     var inherited = previous
                     inherited.imageName = imageName
@@ -707,7 +821,6 @@ class CanvasViewModel: ObservableObject {
     }
 
     func handlePinchDelta(scale: CGFloat, at center: CGPoint) {
-        print("[ViewModel] handlePinchDelta scale: \(scale)")
         let screenCenter = renderer?.convertTouchToScreen(center) ?? center
         renderer?.canvasTransform.applyPinch(scaleFactor: scale, center: screenCenter)
         currentScale = renderer?.canvasTransform.scale ?? 1.0
@@ -731,6 +844,19 @@ class CanvasViewModel: ObservableObject {
         currentScale = renderer.canvasTransform.scale
         transformVersion += 1
         print("[View] Fit to view: scale=\(String(format: "%.2f", currentScale))")
+    }
+
+    /// Apply a specific scale while centering the image (used to preserve zoom during navigation)
+    private func applyScaleCentered(_ scale: CGFloat) {
+        guard let renderer = renderer else { return }
+
+        let imageSize = renderer.textureManager.imageSize
+        let viewportSize = renderer.viewportSize
+
+        renderer.canvasTransform.centerWithScale(scale, imageSize: imageSize, viewSize: viewportSize)
+        currentScale = renderer.canvasTransform.scale
+        transformVersion += 1
+        print("[View] Preserved scale: \(String(format: "%.2f", currentScale))")
     }
 
     // MARK: - Undo/Redo

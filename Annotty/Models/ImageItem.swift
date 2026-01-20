@@ -10,7 +10,12 @@ struct ImageItem: Identifiable, Equatable {
     /// File URL of the source image
     let url: URL
 
-    /// Base name without extension (used for matching annotations)
+    /// Full file name with extension (used as annotation key in JSON)
+    var fileName: String {
+        url.lastPathComponent
+    }
+
+    /// Base name without extension (used for file operations)
     var baseName: String {
         url.deletingPathExtension().lastPathComponent
     }
