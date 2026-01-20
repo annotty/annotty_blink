@@ -9,6 +9,15 @@ struct MainView: View {
     @State private var showingImagePicker = false
     @State private var showingImageSettings = false
 
+    #if os(macOS)
+    /// Binding to share view model with menu commands
+    var viewModelBinding: Binding<CanvasViewModel?>?
+
+    init(viewModelBinding: Binding<CanvasViewModel?>? = nil) {
+        self.viewModelBinding = viewModelBinding
+    }
+    #endif
+
     var body: some View {
         VStack(spacing: 0) {
             // Top bar
@@ -46,7 +55,9 @@ struct MainView: View {
             }
         }
         .background(Color(white: 0.15))
+        #if os(iOS)
         .ignoresSafeArea(.keyboard)
+        #endif
         .overlay {
             // Image settings slide-in panel
             if showingImageSettings {
@@ -78,15 +89,38 @@ struct MainView: View {
         .sheet(isPresented: $showingExportSheet) {
             ExportSheetView(viewModel: viewModel)
         }
+        #if os(iOS)
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
-            // Save when app goes to background
+            // Save when app goes to background (iOS)
             viewModel.saveBeforeBackground()
         }
+        #elseif os(macOS)
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.willResignActiveNotification)) { _ in
+            // Save when app goes to background (macOS)
+            viewModel.saveBeforeBackground()
+        }
+        .onAppear {
+            // Share view model with menu commands on macOS
+            viewModelBinding?.wrappedValue = viewModel
+        }
+        .onDisappear {
+            viewModelBinding?.wrappedValue = nil
+        }
+        #endif
     }
 }
 
 // MARK: - Preview
 
 #Preview {
+    #if os(iOS)
     MainView()
+    #elseif os(macOS)
+    MainView(viewModelBinding: nil)
+    #endif
+}
+
+// MARK: - Private Helpers
+
+extension MainView {
 }

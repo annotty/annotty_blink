@@ -1,6 +1,5 @@
 import Foundation
 import CoreGraphics
-import UIKit
 import Combine
 
 /// Represents a single image in the project with its metadata

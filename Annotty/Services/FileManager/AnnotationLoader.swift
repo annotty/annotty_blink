@@ -1,6 +1,11 @@
 import Foundation
 import CoreGraphics
+
+#if os(iOS)
 import UIKit
+#elseif os(macOS)
+import AppKit
+#endif
 
 /// Loads and processes annotation files
 /// Handles:
@@ -70,11 +75,18 @@ class AnnotationLoader {
     // MARK: - Image Loading
 
     private func loadImage(from url: URL) -> CGImage? {
+        #if os(iOS)
         guard let uiImage = UIImage(contentsOfFile: url.path),
               let cgImage = uiImage.cgImage else {
             return nil
         }
         return cgImage
+        #elseif os(macOS)
+        guard let nsImage = NSImage(contentsOfFile: url.path) else {
+            return nil
+        }
+        return nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        #endif
     }
 
     // MARK: - Mask Scaling

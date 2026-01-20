@@ -2,7 +2,6 @@ import Foundation
 import Metal
 import MetalKit
 import CoreGraphics
-import UIKit
 
 /// Manages Metal textures for image display
 /// Simplified for line-based annotation (no mask textures)

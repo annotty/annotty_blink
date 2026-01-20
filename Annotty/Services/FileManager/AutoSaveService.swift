@@ -1,6 +1,11 @@
 import Foundation
-import UIKit
 import Combine
+
+#if os(iOS)
+import UIKit
+#elseif os(macOS)
+import AppKit
+#endif
 
 /// Handles automatic saving of annotations
 /// Triggers:
@@ -43,6 +48,7 @@ class AutoSaveService: ObservableObject {
     // MARK: - App Lifecycle
 
     private func setupAppLifecycleObservers() {
+        #if os(iOS)
         NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)
             .sink { [weak self] _ in
                 self?.saveImmediately()
@@ -54,6 +60,19 @@ class AutoSaveService: ObservableObject {
                 self?.saveImmediately()
             }
             .store(in: &cancellables)
+        #elseif os(macOS)
+        NotificationCenter.default.publisher(for: NSApplication.willResignActiveNotification)
+            .sink { [weak self] _ in
+                self?.saveImmediately()
+            }
+            .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)
+            .sink { [weak self] _ in
+                self?.saveImmediately()
+            }
+            .store(in: &cancellables)
+        #endif
     }
 
     // MARK: - Save Operations

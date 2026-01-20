@@ -1,5 +1,13 @@
 import AVFoundation
+import CoreGraphics
+import ImageIO
+import UniformTypeIdentifiers
+
+#if os(iOS)
 import UIKit
+#elseif os(macOS)
+import AppKit
+#endif
 
 /// Service for extracting frames from video files
 class VideoFrameExtractor {
@@ -77,14 +85,12 @@ class VideoFrameExtractor {
         for (index, time) in frameTimes.enumerated() {
             do {
                 let cgImage = try imageGenerator.copyCGImage(at: time, actualTime: nil)
-                let uiImage = UIImage(cgImage: cgImage)
 
                 // Save as PNG
                 let frameNumber = String(format: "%05d", index)
                 let frameURL = outputDir.appendingPathComponent("frame_\(frameNumber).png")
 
-                if let pngData = uiImage.pngData() {
-                    try pngData.write(to: frameURL)
+                if saveCGImageAsPNG(cgImage, to: frameURL) {
                     extractedURLs.append(frameURL)
                 }
 
@@ -133,13 +139,11 @@ class VideoFrameExtractor {
 
             do {
                 let cgImage = try imageGenerator.copyCGImage(at: cmTime, actualTime: nil)
-                let uiImage = UIImage(cgImage: cgImage)
 
                 let frameNumber = String(format: "%05d", index)
                 let frameURL = outputDir.appendingPathComponent("frame_\(frameNumber).png")
 
-                if let pngData = uiImage.pngData() {
-                    try pngData.write(to: frameURL)
+                if saveCGImageAsPNG(cgImage, to: frameURL) {
                     extractedURLs.append(frameURL)
                 }
 
@@ -180,6 +184,35 @@ class VideoFrameExtractor {
             height: height,
             frameRate: frameRate
         )
+    }
+
+    // MARK: - Private Helpers
+
+    /// Save CGImage as PNG file (cross-platform)
+    private func saveCGImageAsPNG(_ image: CGImage, to url: URL) -> Bool {
+        #if os(iOS)
+        let uiImage = UIImage(cgImage: image)
+        guard let pngData = uiImage.pngData() else { return false }
+        do {
+            try pngData.write(to: url)
+            return true
+        } catch {
+            return false
+        }
+        #elseif os(macOS)
+        let nsImage = NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height))
+        guard let tiffData = nsImage.tiffRepresentation,
+              let bitmapRep = NSBitmapImageRep(data: tiffData),
+              let pngData = bitmapRep.representation(using: .png, properties: [:]) else {
+            return false
+        }
+        do {
+            try pngData.write(to: url)
+            return true
+        } catch {
+            return false
+        }
+        #endif
     }
 }
 

@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Annotty Blink is an iPad app for annotating blink (eye) data in images/video frames. It uses a 12-line annotation system to mark eye landmarks for machine learning training data preparation.
 
-**Target Platform:** iPadOS 17+ (Apple Pencil + finger supported)
+**Target Platform:** iPadOS 17+ (Apple Pencil + finger supported), Mac (Designed for iPad)
 **Tech Stack:** SwiftUI + Metal (no external dependencies)
 
 ## Build Commands
@@ -112,11 +112,23 @@ Documents/
 
 ## Export Format
 
-| Format | Service | Output |
-|--------|---------|--------|
-| Original + Mask | `PNGExporter` | Original image + `{basename}_label.png` mask |
+Export creates a timestamped folder with the following structure:
 
-Mask export creates black background with colored lines (1px width) at the annotation positions.
+```
+Annotty_export_YYYYMMDD_HHMMSS/
+├── images/                    # Original images (optional)
+├── labels/                    # Mask images
+│   └── {basename}_label.png   # Black background + colored lines
+└── blink_annotations.json     # All annotations in JSON
+```
+
+| Option | Description |
+|--------|-------------|
+| Original Images | Copy source images to `images/` folder |
+| Label Masks | Black background with colored lines (1px width) |
+| JSON Coordinates | Normalized 0-1 line positions |
+
+**Mac export:** Folder picker available to choose export destination.
 
 ## UI Layout
 
@@ -175,3 +187,58 @@ var annotations: [String: BlinkAnnotation]  // key = "frame_001.png"
 - New images are appended to end of list (not sorted alphabetically)
 - Delete button in navigator removes image + annotation data
 - Video frame extraction via `VideoFrameExtractor` (for future use)
+
+### Mac Compatibility (Designed for iPad)
+
+The app runs on Mac via "Designed for iPad". Key considerations:
+
+- **Platform detection:** Use `ProcessInfo.processInfo.isiOSAppOnMac` to detect Mac at runtime
+- **`#if os(macOS)` blocks are NOT compiled** - iOS code paths are used
+- **File dialogs:** Use SwiftUI `.fileImporter()` modifier (works on iOS-on-Mac), never `NSOpenPanel.runModal()`
+- **Heavy operations:** Use `Task.detached` to avoid blocking MainActor
+
+### PlatformColor Extension Warning
+
+**NEVER add extension properties to `PlatformColor` (UIColor/NSColor) with names that already exist in the base class.**
+
+Bad example (causes infinite recursion crash):
+```swift
+extension PlatformColor {
+    static var secondarySystemBackground: PlatformColor {
+        return UIColor.secondarySystemBackground  // Calls itself!
+    }
+}
+```
+
+iOS already has `UIColor.secondarySystemBackground`. Adding an extension with the same name shadows it and causes infinite recursion → stack overflow → `EXC_BAD_ACCESS`.
+
+Solution: Only add these properties for macOS where they don't exist:
+```swift
+#if os(macOS)
+extension PlatformColor {
+    static var secondarySystemBackground: PlatformColor {
+        return NSColor.controlBackgroundColor
+    }
+}
+#endif
+```
+
+## Claude Code 作業完了時チェックリスト
+
+**必ず作業完了前に以下を確認すること：**
+
+### 1. 重複CLAUDE.mdファイルの削除
+Xcodeがサブディレクトリ内のCLAUDE.mdをビルドに含めてしまうため、ルート以外のCLAUDE.mdは削除が必要。
+
+```bash
+# 重複ファイルの確認と削除
+find /Users/kitaguchi/annotty_blink -name "CLAUDE.md" ! -path "/Users/kitaguchi/annotty_blink/CLAUDE.md" -print -delete
+
+# DerivedDataのクリア（キャッシュが残っている場合）
+rm -rf ~/Library/Developer/Xcode/DerivedData/Annotty-*
+```
+
+### 2. ビルド確認
+```bash
+xcodebuild -scheme Annotty -destination 'platform=iOS Simulator,name=iPad Pro 13-inch (M5)' build 2>&1 | grep -E "(BUILD SUCCEEDED|BUILD FAILED|error:)"
+```

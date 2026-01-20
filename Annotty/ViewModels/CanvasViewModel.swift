@@ -319,6 +319,15 @@ class CanvasViewModel: ObservableObject {
         gestureCoordinator.onRedo = { [weak self] in
             self?.redo()
         }
+
+        // Line selection callbacks (arrow keys)
+        gestureCoordinator.onSelectPreviousLine = { [weak self] in
+            self?.selectPreviousLine()
+        }
+
+        gestureCoordinator.onSelectNextLine = { [weak self] in
+            self?.selectNextLine()
+        }
     }
 
     private func setupBindings() {
@@ -456,6 +465,26 @@ class CanvasViewModel: ObservableObject {
         annotation.visibility.setVisible(lineType, visible: visible)
         currentAnnotation = annotation
         annotations[imageName] = annotation
+    }
+
+    // MARK: - Line Selection (Arrow Keys)
+
+    /// Select the previous line type (wraps around)
+    func selectPreviousLine() {
+        let allLines = BlinkLineType.allCases
+        guard let currentIndex = allLines.firstIndex(of: selectedLineType) else { return }
+
+        let previousIndex = currentIndex == 0 ? allLines.count - 1 : currentIndex - 1
+        selectedLineType = allLines[previousIndex]
+    }
+
+    /// Select the next line type (wraps around)
+    func selectNextLine() {
+        let allLines = BlinkLineType.allCases
+        guard let currentIndex = allLines.firstIndex(of: selectedLineType) else { return }
+
+        let nextIndex = (currentIndex + 1) % allLines.count
+        selectedLineType = allLines[nextIndex]
     }
 
     // MARK: - Line Dragging

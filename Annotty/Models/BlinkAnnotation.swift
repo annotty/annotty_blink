@@ -103,10 +103,10 @@ struct EyeLinePositions: Codable, Equatable {
     /// Y coordinate for lower eyelid line (0-1)
     var lowerLidY: CGFloat
 
-    /// Default positions for left eye (left side of image)
+    /// Default positions for left eye (right side of image when viewing face)
     static func defaultLeft() -> EyeLinePositions {
         EyeLinePositions(
-            pupilVerticalX: 0.3,      // Left third of image
+            pupilVerticalX: 0.7,      // Right side of image (subject's left eye)
             pupilHorizontalY: 0.5,    // Center vertically
             upperBrowY: 0.35,         // Above pupil
             lowerBrowY: 0.40,         // Below upper brow
@@ -115,10 +115,10 @@ struct EyeLinePositions: Codable, Equatable {
         )
     }
 
-    /// Default positions for right eye (right side of image)
+    /// Default positions for right eye (left side of image when viewing face)
     static func defaultRight() -> EyeLinePositions {
         EyeLinePositions(
-            pupilVerticalX: 0.7,      // Right third of image
+            pupilVerticalX: 0.3,      // Left side of image (subject's right eye)
             pupilHorizontalY: 0.5,    // Center vertically
             upperBrowY: 0.35,         // Above pupil
             lowerBrowY: 0.40,         // Below upper brow

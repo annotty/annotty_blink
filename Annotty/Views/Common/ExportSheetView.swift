@@ -1,53 +1,76 @@
 import SwiftUI
+import UniformTypeIdentifiers
+
+#if os(iOS)
+import UIKit
+#elseif os(macOS)
+import AppKit
+#endif
 
 /// Export sheet for blink annotation export
 struct ExportSheetView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var viewModel: CanvasViewModel
 
+    @State private var exportImages = true
     @State private var exportMasks = true
     @State private var exportJSON = true
     @State private var isExporting = false
     @State private var exportComplete = false
     @State private var showingShareSheet = false
-    @State private var exportedURLs: [URL] = []
+    @State private var exportedFolderURL: URL?
+    @State private var exportedFileCount = 0
     @State private var errorMessage: String?
+    @State private var selectedExportURL: URL?
+    @State private var showingFolderPicker = false
+
+    /// Detect if running as iOS app on Mac
+    private var isRunningOnMac: Bool {
+        #if os(macOS)
+        return true
+        #else
+        return ProcessInfo.processInfo.isiOSAppOnMac
+        #endif
+    }
 
     var body: some View {
         NavigationView {
-            VStack(spacing: 24) {
-                // Mask export option
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("Mask Export")
+            VStack(spacing: 20) {
+                // Export contents section
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Export Contents")
                         .font(.headline)
+
+                    Toggle(isOn: $exportImages) {
+                        HStack {
+                            Image(systemName: "photo")
+                            VStack(alignment: .leading) {
+                                Text("Original Images")
+                                Text("Copy source images to images/ folder")
+                                    .font(.caption)
+                                    .foregroundColor(.gray)
+                            }
+                        }
+                    }
 
                     Toggle(isOn: $exportMasks) {
                         HStack {
                             Image(systemName: "square.on.square")
                             VStack(alignment: .leading) {
                                 Text("Label Masks")
-                                Text("Black background with colored lines as {basename}_label.png")
+                                Text("Annotation masks in labels/ folder")
                                     .font(.caption)
                                     .foregroundColor(.gray)
                             }
                         }
                     }
-                }
-                .padding()
-                .background(Color(UIColor.secondarySystemBackground))
-                .cornerRadius(12)
-
-                // JSON export toggle
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("Data Export")
-                        .font(.headline)
 
                     Toggle(isOn: $exportJSON) {
                         HStack {
                             Image(systemName: "doc.text")
                             VStack(alignment: .leading) {
                                 Text("JSON Coordinates")
-                                Text("All line positions in normalized 0-1 format")
+                                Text("Line positions in normalized 0-1 format")
                                     .font(.caption)
                                     .foregroundColor(.gray)
                             }
@@ -55,15 +78,44 @@ struct ExportSheetView: View {
                     }
                 }
                 .padding()
-                .background(Color(UIColor.secondarySystemBackground))
+                .background(Color(PlatformColor.secondarySystemBackground))
                 .cornerRadius(12)
+
+                // Export destination picker (Mac only)
+                if isRunningOnMac {
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Export Destination")
+                            .font(.headline)
+
+                        HStack {
+                            Image(systemName: "folder")
+                            if let url = selectedExportURL {
+                                Text(url.path)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                            } else {
+                                Text("Default: labels/ folder")
+                                    .foregroundColor(.gray)
+                            }
+                            Spacer()
+                            Button("Choose...") {
+                                showingFolderPicker = true
+                            }
+                        }
+                    }
+                    .padding()
+                    .background(Color(PlatformColor.secondarySystemBackground))
+                    .cornerRadius(12)
+                }
 
                 // Export button
                 Button(action: performExport) {
                     HStack {
                         if isExporting {
                             ProgressView()
+                                #if os(iOS)
                                 .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                #endif
                         } else {
                             Image(systemName: "square.and.arrow.up")
                         }
@@ -87,32 +139,68 @@ struct ExportSheetView: View {
                     .font(.caption)
                 }
 
-                if exportComplete {
-                    HStack {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(.green)
-                        Text("Export complete! \(exportedURLs.count) files")
-                    }
+                if exportComplete, let folderURL = exportedFolderURL {
+                    VStack(spacing: 8) {
+                        HStack {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.green)
+                            Text("Export complete!")
+                        }
+                        Text("\(exportedFileCount) files in \(folderURL.lastPathComponent)/")
+                            .font(.caption)
+                            .foregroundColor(.gray)
 
-                    Button("Share Files") {
-                        showingShareSheet = true
+                        if isRunningOnMac {
+                            Button("Show in Finder") {
+                                openInFinder()
+                            }
+                            .buttonStyle(.bordered)
+                        } else {
+                            Button("Share Folder") {
+                                showingShareSheet = true
+                            }
+                            .buttonStyle(.bordered)
+                        }
                     }
-                    .buttonStyle(.bordered)
                 }
 
                 Spacer()
 
-                // Info text
-                VStack(spacing: 4) {
-                    Text("Files will be saved to the labels/ folder")
+                // Info text - folder structure preview
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Export folder structure:")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                    Text("  Annotty_export_[timestamp]/")
+                        .font(.caption.monospaced())
+                        .foregroundColor(.gray)
+                    if exportImages {
+                        Text("    ├── images/")
+                            .font(.caption.monospaced())
+                            .foregroundColor(.gray)
+                    }
+                    if exportMasks {
+                        Text("    ├── labels/")
+                            .font(.caption.monospaced())
+                            .foregroundColor(.gray)
+                    }
+                    if exportJSON {
+                        Text("    └── blink_annotations.json")
+                            .font(.caption.monospaced())
+                            .foregroundColor(.gray)
+                    }
                     Text("Annotated frames: \(viewModel.annotations.count)")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                        .padding(.top, 4)
                 }
-                .font(.caption)
-                .foregroundColor(.gray)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(24)
             .navigationTitle("Export Annotations")
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
@@ -120,90 +208,170 @@ struct ExportSheetView: View {
                     }
                 }
             }
+            #if os(iOS)
             .sheet(isPresented: $showingShareSheet) {
-                if !exportedURLs.isEmpty {
-                    ShareSheet(items: exportedURLs)
+                if let folderURL = exportedFolderURL {
+                    ShareSheet(items: [folderURL])
+                }
+            }
+            #endif
+            .fileImporter(
+                isPresented: $showingFolderPicker,
+                allowedContentTypes: [.folder],
+                allowsMultipleSelection: false
+            ) { result in
+                switch result {
+                case .success(let urls):
+                    if let url = urls.first {
+                        // Start accessing security-scoped resource
+                        _ = url.startAccessingSecurityScopedResource()
+                        selectedExportURL = url
+                    }
+                case .failure:
+                    break
                 }
             }
         }
     }
 
     private var canExport: Bool {
-        exportMasks || exportJSON
+        exportImages || exportMasks || exportJSON
+    }
+
+    /// Open export folder in Finder (works on both native macOS and iOS-on-Mac)
+    private func openInFinder() {
+        guard let folderURL = exportedFolderURL else { return }
+
+        #if os(macOS)
+        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: folderURL.path)
+        #else
+        // iOS on Mac: Open folder URL to reveal in Finder
+        UIApplication.shared.open(folderURL)
+        #endif
     }
 
     private func performExport() {
         isExporting = true
         errorMessage = nil
         exportComplete = false
-        exportedURLs = []
+        exportedFolderURL = nil
+        exportedFileCount = 0
 
-        Task {
+        // Capture values needed for background task
+        let shouldExportImages = exportImages
+        let shouldExportJSON = exportJSON
+        let shouldExportMasks = exportMasks
+        let annotationsCopy = viewModel.annotations
+        let customExportURL = selectedExportURL
+
+        // Use Task.detached to run heavy export work off the main thread
+        Task.detached(priority: .userInitiated) {
+            // Start security-scoped access for custom export folder
+            let didStartAccessing = customExportURL?.startAccessingSecurityScopedResource() ?? false
+            defer {
+                if didStartAccessing {
+                    customExportURL?.stopAccessingSecurityScopedResource()
+                }
+            }
+
             do {
-                var urls: [URL] = []
+                var fileCount = 0
 
-                // Get labels directory
-                guard let labelsDir = ProjectFileService.shared.labelsURL else {
+                // Determine base output directory
+                let baseDir: URL
+                if let customURL = customExportURL {
+                    baseDir = customURL
+                } else if let projectRoot = ProjectFileService.shared.projectRoot {
+                    baseDir = projectRoot
+                } else {
                     throw ExportError.outputDirectoryNotFound
                 }
 
-                // Create output directory
-                try FileManager.default.createDirectory(at: labelsDir, withIntermediateDirectories: true)
+                // Create timestamped export folder
+                let dateFormatter = DateFormatter()
+                dateFormatter.dateFormat = "yyyyMMdd_HHmmss"
+                let timestamp = dateFormatter.string(from: Date())
+                let exportFolderName = "Annotty_export_\(timestamp)"
+                let exportDir = baseDir.appendingPathComponent(exportFolderName)
 
+                print("[Export] Creating export folder: \(exportDir.path)")
+                try FileManager.default.createDirectory(at: exportDir, withIntermediateDirectories: true)
+
+                let imageURLs = ProjectFileService.shared.getImageURLs()
                 let exporter = PNGExporter()
 
-                // Export JSON if enabled
-                if exportJSON {
-                    let jsonURL = labelsDir.appendingPathComponent("blink_annotations.json")
-                    let annotationArray = viewModel.annotations.values.sorted { $0.imageName < $1.imageName }
+                // Export original images if enabled
+                if shouldExportImages {
+                    let imagesDir = exportDir.appendingPathComponent("images")
+                    try FileManager.default.createDirectory(at: imagesDir, withIntermediateDirectories: true)
 
-                    let encoder = JSONEncoder()
-                    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-                    let jsonData = try encoder.encode(annotationArray)
-                    try jsonData.write(to: jsonURL)
-                    urls.append(jsonURL)
+                    for imageURL in imageURLs {
+                        let destURL = imagesDir.appendingPathComponent(imageURL.lastPathComponent)
+                        try FileManager.default.copyItem(at: imageURL, to: destURL)
+                        fileCount += 1
+                    }
+                    print("[Export] Copied \(imageURLs.count) images")
                 }
 
                 // Export mask images if enabled
-                if exportMasks {
-                    let imageURLs = ProjectFileService.shared.getImageURLs()
+                if shouldExportMasks {
+                    let labelsDir = exportDir.appendingPathComponent("labels")
+                    try FileManager.default.createDirectory(at: labelsDir, withIntermediateDirectories: true)
 
                     for imageURL in imageURLs {
                         let baseName = imageURL.deletingPathExtension().lastPathComponent
 
-                        // Skip images without annotations
-                        guard let annotation = viewModel.annotations[baseName] else { continue }
+                        guard let annotation = annotationsCopy[baseName] else {
+                            continue
+                        }
 
-                        // Output as {basename}_label.png
                         let outputURL = labelsDir.appendingPathComponent("\(baseName)_label.png")
-
                         try exporter.exportMask(
                             imageURL: imageURL,
                             annotation: annotation,
                             outputURL: outputURL
                         )
-
-                        urls.append(outputURL)
+                        fileCount += 1
                     }
+                    print("[Export] Created \(annotationsCopy.count) label masks")
                 }
 
+                // Export JSON if enabled
+                if shouldExportJSON {
+                    let jsonURL = exportDir.appendingPathComponent("blink_annotations.json")
+                    let annotationArray = annotationsCopy.values.sorted { $0.imageName < $1.imageName }
+
+                    let encoder = JSONEncoder()
+                    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+                    let jsonData = try encoder.encode(annotationArray)
+                    try jsonData.write(to: jsonURL)
+                    fileCount += 1
+                    print("[Export] Created blink_annotations.json")
+                }
+
+                print("[Export] Complete! \(fileCount) files in \(exportFolderName)")
+
                 await MainActor.run {
-                    exportedURLs = urls
-                    exportComplete = true
-                    isExporting = false
+                    self.exportedFolderURL = exportDir
+                    self.exportedFileCount = fileCount
+                    self.exportComplete = true
+                    self.isExporting = false
                 }
 
             } catch {
+                print("[Export] Error: \(error.localizedDescription)")
                 await MainActor.run {
-                    errorMessage = error.localizedDescription
-                    isExporting = false
+                    self.errorMessage = error.localizedDescription
+                    self.isExporting = false
                 }
             }
         }
     }
 }
 
-/// UIKit share sheet wrapper
+// MARK: - iOS Share Sheet
+
+#if os(iOS)
 struct ShareSheet: UIViewControllerRepresentable {
     let items: [Any]
 
@@ -213,6 +381,7 @@ struct ShareSheet: UIViewControllerRepresentable {
 
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
+#endif
 
 // MARK: - Preview
 

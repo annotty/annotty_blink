@@ -1,6 +1,13 @@
 import simd
-import UIKit
 import CoreGraphics
+
+#if os(iOS)
+import UIKit
+typealias PlatformColorSIMD = UIColor
+#elseif os(macOS)
+import AppKit
+typealias PlatformColorSIMD = NSColor
+#endif
 
 extension simd_float2 {
     /// Create from CGPoint
@@ -15,14 +22,21 @@ extension simd_float2 {
 }
 
 extension simd_float4 {
-    /// Create from UIColor
-    init(_ color: UIColor) {
+    /// Create from PlatformColor (UIColor on iOS, NSColor on macOS)
+    init(_ color: PlatformColorSIMD) {
         var r: CGFloat = 0
         var g: CGFloat = 0
         var b: CGFloat = 0
         var a: CGFloat = 0
 
+        #if os(iOS)
         color.getRed(&r, green: &g, blue: &b, alpha: &a)
+        #elseif os(macOS)
+        // Convert to RGB color space first for macOS
+        if let rgbColor = color.usingColorSpace(.deviceRGB) {
+            rgbColor.getRed(&r, green: &g, blue: &b, alpha: &a)
+        }
+        #endif
 
         self.init(Float(r), Float(g), Float(b), Float(a))
     }

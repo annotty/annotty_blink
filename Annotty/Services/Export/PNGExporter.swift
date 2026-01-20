@@ -1,6 +1,11 @@
 import Foundation
 import CoreGraphics
+
+#if os(iOS)
 import UIKit
+#elseif os(macOS)
+import AppKit
+#endif
 
 /// Export mode for blink annotations
 enum BlinkExportMode {
@@ -23,8 +28,8 @@ class PNGExporter {
         annotation: BlinkAnnotation,
         outputURL: URL
     ) throws {
-        guard let sourceImage = UIImage(contentsOfFile: imageURL.path),
-              let cgImage = sourceImage.cgImage else {
+        // Load source image to get dimensions
+        guard let cgImage = loadCGImage(from: imageURL) else {
             throw ExportError.cannotLoadImage
         }
 
@@ -48,7 +53,7 @@ class PNGExporter {
         }
 
         // Fill with black background
-        context.setFillColor(UIColor.black.cgColor)
+        context.setFillColor(CGColor(red: 0, green: 0, blue: 0, alpha: 1))
         context.fill(CGRect(x: 0, y: 0, width: width, height: height))
 
         // Draw annotation lines on black background
@@ -59,12 +64,42 @@ class PNGExporter {
             throw ExportError.cannotCreateImage
         }
 
-        let uiImage = UIImage(cgImage: outputImage)
+        try saveCGImageAsPNG(outputImage, to: outputURL)
+    }
+
+    /// Load CGImage from file URL (cross-platform)
+    private func loadCGImage(from url: URL) -> CGImage? {
+        #if os(iOS)
+        guard let uiImage = UIImage(contentsOfFile: url.path) else {
+            return nil
+        }
+        return uiImage.cgImage
+        #elseif os(macOS)
+        guard let nsImage = NSImage(contentsOfFile: url.path) else {
+            return nil
+        }
+        return nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        #endif
+    }
+
+    /// Save CGImage as PNG file (cross-platform)
+    private func saveCGImageAsPNG(_ cgImage: CGImage, to url: URL) throws {
+        #if os(iOS)
+        let uiImage = UIImage(cgImage: cgImage)
         guard let pngData = uiImage.pngData() else {
             throw ExportError.cannotEncodePNG
         }
-
-        try pngData.write(to: outputURL)
+        try pngData.write(to: url)
+        #elseif os(macOS)
+        let size = NSSize(width: cgImage.width, height: cgImage.height)
+        let nsImage = NSImage(cgImage: cgImage, size: size)
+        guard let tiffData = nsImage.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiffData),
+              let pngData = bitmap.representation(using: .png, properties: [:]) else {
+            throw ExportError.cannotEncodePNG
+        }
+        try pngData.write(to: url)
+        #endif
     }
 
     /// Draw all annotation lines on the context

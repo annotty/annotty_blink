@@ -1,6 +1,5 @@
 import Foundation
 import CoreGraphics
-import UIKit
 
 /// Result of parsing a color annotation PNG
 struct ParsedAnnotation {
