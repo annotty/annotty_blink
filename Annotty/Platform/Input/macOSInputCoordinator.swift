@@ -3,7 +3,7 @@ import AppKit
 import Combine
 
 /// macOS implementation of input coordination using mouse and trackpad gestures
-/// Handles mouse drag for lines, scroll for pan, Cmd+scroll for zoom, Option+scroll for rotation
+/// Handles mouse drag for lines, vertical scroll for zoom, horizontal scroll for pan, Option+scroll for rotation
 class macOSInputCoordinator: NSObject, InputCoordinatorProtocol {
 
     // MARK: - InputCoordinatorProtocol Callbacks
@@ -18,6 +18,8 @@ class macOSInputCoordinator: NSObject, InputCoordinatorProtocol {
     var onRedo: (() -> Void)?
     var onSelectPreviousLine: (() -> Void)?
     var onSelectNextLine: (() -> Void)?
+    var onPreviousImage: (() -> Void)?
+    var onNextImage: (() -> Void)?
 
     // MARK: - State
 
@@ -122,8 +124,25 @@ class macOSInputCoordinator: NSObject, InputCoordinatorProtocol {
         }
     }
 
+    /// Handle magnification event (Pinch gesture from trackpad)
+    func magnify(with event: NSEvent) {
+        guard let view = view else { return }
+        
+        // event.magnification is the change in scale (e.g. 0.01)
+        // We want a multiplier: 1.0 + magnification
+        let scale = 1.0 + event.magnification
+        let location = view.convert(event.locationInWindow, from: nil)
+        
+        print("[Input] magnify event: scale \(scale)")
+        onPinch?(scale, location)
+        lastNavigationGestureTime = Date()
+    }
+
     /// Handle scroll wheel event
+    /// Default: Vertical scroll = Zoom, Horizontal scroll = Pan
+    /// Option key: Rotation
     func scrollWheel(with event: NSEvent) {
+        print("[Input] scrollWheel raw deltaY: \(event.scrollingDeltaY)")
         guard let view = view else { return }
 
         let location = view.convert(event.locationInWindow, from: nil)
@@ -132,29 +151,31 @@ class macOSInputCoordinator: NSObject, InputCoordinatorProtocol {
         // Check for modifier keys
         let modifiers = event.modifierFlags
 
-        if modifiers.contains(.command) {
-            // Cmd + scroll = Zoom
-            // Use scrollingDeltaY for zoom (positive = zoom in, negative = zoom out)
-            let zoomDelta = event.scrollingDeltaY * 0.01
-            let scale = 1.0 + zoomDelta
-            onPinch?(scale, location)
-            lastNavigationGestureTime = Date()
-
-        } else if modifiers.contains(.option) {
+        if modifiers.contains(.option) {
             // Option + scroll = Rotation
-            // Use scrollingDeltaX for rotation
             let rotationDelta = event.scrollingDeltaX * 0.01
             onRotation?(rotationDelta, location)
             lastNavigationGestureTime = Date()
 
         } else {
-            // Normal scroll = Pan
-            // Note: macOS natural scrolling is already handled by the system
-            let translation = CGPoint(
-                x: event.scrollingDeltaX,
-                y: -event.scrollingDeltaY  // Invert Y for natural feel
-            )
-            onPan?(translation)
+            // Default: Vertical = Zoom, Horizontal = Pan
+            let deltaY = event.scrollingDeltaY
+            let deltaX = event.scrollingDeltaX
+
+            // Vertical scroll → Zoom (swipe up = zoom in, swipe down = zoom out)
+            if abs(deltaY) > 0.01 { // Lowered threshold from 0.1
+                let zoomDelta = deltaY * 0.05 // Increased sensitivity from 0.01
+                let scale = 1.0 + zoomDelta
+                print("[Input] Pinching with scale: \(scale) from deltaY: \(deltaY)")
+                onPinch?(scale, location)
+            }
+
+            // Horizontal scroll → Pan
+            if abs(deltaX) > 0.1 {
+                let translation = CGPoint(x: deltaX, y: 0)
+                onPan?(translation)
+            }
+
             lastNavigationGestureTime = Date()
         }
     }
@@ -194,6 +215,12 @@ class macOSInputCoordinator: NSObject, InputCoordinatorProtocol {
             return true
         case 125: // Down arrow
             onSelectNextLine?()
+            return true
+        case 123: // Left arrow
+            onPreviousImage?()
+            return true
+        case 124: // Right arrow
+            onNextImage?()
             return true
         default:
             break

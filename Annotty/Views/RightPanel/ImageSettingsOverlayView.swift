@@ -1,11 +1,15 @@
 import SwiftUI
 
 /// Slide-in overlay panel for image settings
-/// Contains contrast and brightness adjustments
+/// Contains contrast and brightness adjustments, and annotation settings
 struct ImageSettingsOverlayView: View {
     @Binding var isPresented: Bool
     @Binding var imageContrast: Float
     @Binding var imageBrightness: Float
+    @Binding var autoCopyPreviousAnnotation: Bool
+    var onAllReset: (() -> Void)? = nil
+
+    @State private var showingAllResetConfirmation = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -80,6 +84,35 @@ struct ImageSettingsOverlayView: View {
                         .background(Color.gray.opacity(0.5))
                         .padding(.horizontal, 16)
 
+                    // Annotation settings section
+                    VStack(spacing: 12) {
+                        Text("Annotation")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 16)
+
+                        // Auto-copy toggle
+                        HStack {
+                            Toggle(isOn: $autoCopyPreviousAnnotation) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("前の画像から自動コピー")
+                                        .font(.caption)
+                                        .foregroundColor(.white)
+                                    Text("新しい画像に移動時、前の画像のアノテーションをコピー")
+                                        .font(.caption2)
+                                        .foregroundColor(.gray.opacity(0.8))
+                                }
+                            }
+                            .toggleStyle(SwitchToggleStyle(tint: .cyan))
+                        }
+                        .padding(.horizontal, 16)
+                    }
+
+                    Divider()
+                        .background(Color.gray.opacity(0.5))
+                        .padding(.horizontal, 16)
+
                     // Line annotation info section
                     VStack(spacing: 8) {
                         Text("Line Annotation")
@@ -108,12 +141,57 @@ struct ImageSettingsOverlayView: View {
                         .padding(.horizontal, 16)
                     }
 
+                    // All Reset section
+                    if onAllReset != nil {
+                        Divider()
+                            .background(Color.gray.opacity(0.5))
+                            .padding(.horizontal, 16)
+
+                        VStack(spacing: 12) {
+                            Text("Danger Zone")
+                                .font(.caption)
+                                .foregroundColor(.red.opacity(0.8))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 16)
+
+                            Button(action: {
+                                showingAllResetConfirmation = true
+                            }) {
+                                HStack {
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                    Text("All Reset")
+                                }
+                                .font(.caption)
+                                .foregroundColor(.white)
+                                .padding(.vertical, 8)
+                                .padding(.horizontal, 16)
+                                .background(Color.red.opacity(0.8))
+                                .cornerRadius(6)
+                            }
+                            .buttonStyle(.plain)
+
+                            Text("画像・アノテーション・JSONをすべて削除します")
+                                .font(.caption2)
+                                .foregroundColor(.gray.opacity(0.6))
+                                .padding(.horizontal, 16)
+                        }
+                    }
+
                     Spacer()
                         .frame(height: 20)
                 }
             }
             .frame(width: 220)
             .background(Color(white: 0.12))
+        }
+        .alert("All Reset", isPresented: $showingAllResetConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Reset All", role: .destructive) {
+                isPresented = false
+                onAllReset?()
+            }
+        } message: {
+            Text("すべての画像、アノテーション、JSONファイルが削除されます。この操作は取り消せません。")
         }
     }
 
@@ -207,7 +285,8 @@ struct SettingsSliderView: View {
         ImageSettingsOverlayView(
             isPresented: .constant(true),
             imageContrast: .constant(1.0),
-            imageBrightness: .constant(0.0)
+            imageBrightness: .constant(0.0),
+            autoCopyPreviousAnnotation: .constant(false)
         )
     }
     .frame(width: 400, height: 600)

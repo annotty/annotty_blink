@@ -50,6 +50,19 @@ Display (MTKView + SwiftUI overlays)
 | `MetalRenderer.swift` | Metal pipeline for image display with brightness/contrast adjustments. |
 | `CanvasTransform.swift` | Coordinate transform matrix for pan/zoom/rotate operations. |
 
+### Platform Abstraction Layer (`Platform/`)
+
+Cross-platform input handling for iOS and Mac (Designed for iPad):
+
+| File | Responsibility |
+|------|----------------|
+| `PlatformTypes.swift` | Type aliases (`PlatformColor`, `PlatformImage`) and platform-specific extensions. |
+| `InputCoordinatorProtocol.swift` | Protocol defining keyboard event handling interface. |
+| `iOSInputCoordinator.swift` | iOS implementation (hardware keyboard via pressesBegan). |
+| `macOSInputCoordinator.swift` | Mac implementation using NSEvent keyboard monitor for arrow key navigation. |
+
+**Arrow key navigation:** On Mac, arrow keys (↑↓) cycle through line types. This uses `NSEvent.addLocalMonitorForEvents` to intercept keys before they trigger system beeps.
+
 ### 12-Line Annotation System
 
 Each eye has 6 lines (12 total):
@@ -194,8 +207,10 @@ The app runs on Mac via "Designed for iPad". Key considerations:
 
 - **Platform detection:** Use `ProcessInfo.processInfo.isiOSAppOnMac` to detect Mac at runtime
 - **`#if os(macOS)` blocks are NOT compiled** - iOS code paths are used
-- **File dialogs:** Use SwiftUI `.fileImporter()` modifier (works on iOS-on-Mac), never `NSOpenPanel.runModal()`
+- **File dialogs:** Use SwiftUI `.fileImporter()` modifier (works on iOS-on-Mac), never `NSOpenPanel.runModal()` (causes freeze)
 - **Heavy operations:** Use `Task.detached` to avoid blocking MainActor
+- **Keyboard events:** Use `NSEvent.addLocalMonitorForEvents` for arrow keys (not `keyDown` override)
+- **Share button:** Hidden on Mac (uses folder picker for export instead)
 
 ### PlatformColor Extension Warning
 
@@ -223,22 +238,22 @@ extension PlatformColor {
 #endif
 ```
 
-## Claude Code 作業完了時チェックリスト
+## Pre-Commit Checklist
 
-**必ず作業完了前に以下を確認すること：**
+**Before completing work, verify:**
 
-### 1. 重複CLAUDE.mdファイルの削除
-Xcodeがサブディレクトリ内のCLAUDE.mdをビルドに含めてしまうため、ルート以外のCLAUDE.mdは削除が必要。
+### 1. Remove duplicate CLAUDE.md files
+Xcode includes subdirectory CLAUDE.md files in builds, causing errors. Only the root CLAUDE.md should exist.
 
 ```bash
-# 重複ファイルの確認と削除
-find /Users/kitaguchi/annotty_blink -name "CLAUDE.md" ! -path "/Users/kitaguchi/annotty_blink/CLAUDE.md" -print -delete
+# Find and delete duplicates
+find . -name "CLAUDE.md" ! -path "./CLAUDE.md" -print -delete
 
-# DerivedDataのクリア（キャッシュが残っている場合）
+# Clear DerivedData if cached errors persist
 rm -rf ~/Library/Developer/Xcode/DerivedData/Annotty-*
 ```
 
-### 2. ビルド確認
+### 2. Verify build succeeds
 ```bash
 xcodebuild -scheme Annotty -destination 'platform=iOS Simulator,name=iPad Pro 13-inch (M5)' build 2>&1 | grep -E "(BUILD SUCCEEDED|BUILD FAILED|error:)"
 ```

@@ -176,5 +176,11 @@ class ImageItemManager: ObservableObject {
     func index(of baseName: String) -> Int? {
         items.firstIndex { $0.baseName == baseName }
     }
+
+    /// Clear all images
+    func clear() {
+        items = []
+        currentIndex = 0
+    }
 }
 

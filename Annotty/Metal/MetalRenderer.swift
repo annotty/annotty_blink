@@ -24,7 +24,7 @@ class MetalRenderer: NSObject, ObservableObject {
 
     // MARK: - State
 
-    var canvasTransform = CanvasTransform()
+    @Published var canvasTransform = CanvasTransform()
     private(set) var viewportSize: CGSize = .zero
     private(set) var contentScaleFactor: CGFloat = 1.0
 
@@ -148,6 +148,11 @@ class MetalRenderer: NSObject, ObservableObject {
     func loadImage(_ cgImage: CGImage) throws {
         try textureManager.loadImage(cgImage)
         canvasTransform.maskScaleFactor = textureManager.maskScaleFactor
+    }
+
+    /// Clear the current image
+    func clearImage() {
+        textureManager.clear()
     }
 
     // MARK: - Viewport

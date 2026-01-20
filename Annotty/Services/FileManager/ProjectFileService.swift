@@ -192,6 +192,41 @@ class ProjectFileService {
             }
         }
     }
+
+    // MARK: - Clear All Data
+
+    /// Delete all images, annotations, and labels
+    func clearAllData() throws {
+        // Delete all images
+        if let imagesFolder = imagesFolder {
+            try clearFolderContents(imagesFolder)
+        }
+
+        // Delete all annotations
+        if let annotationsFolder = annotationsFolder {
+            try clearFolderContents(annotationsFolder)
+        }
+
+        // Delete all labels
+        if let labelsFolder = labelsFolder {
+            try clearFolderContents(labelsFolder)
+        }
+
+        print("[ProjectFileService] Cleared all data")
+    }
+
+    /// Clear contents of a folder (but keep the folder itself)
+    private func clearFolderContents(_ folderURL: URL) throws {
+        let contents = try fileManager.contentsOfDirectory(
+            at: folderURL,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )
+
+        for fileURL in contents {
+            try fileManager.removeItem(at: fileURL)
+        }
+    }
 }
 
 // MARK: - Export Format

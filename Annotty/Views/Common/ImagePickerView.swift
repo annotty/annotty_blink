@@ -10,6 +10,7 @@ import PhotosUI
 struct ImagePickerView: View {
     @Environment(\.dismiss) private var dismiss
     let onImageSelected: (URL) -> Void
+    let onImagesSelected: ([URL]) -> Void
     let onFolderSelected: (URL) -> Void
     let onProjectSelected: (URL) -> Void
     let onVideoSelected: (URL) -> Void
@@ -366,10 +367,8 @@ struct ImagePickerView: View {
 
                 await MainActor.run {
                     isExtractingFrames = false
-                    // Import extracted frames
-                    for frameURL in frameURLs {
-                        onImageSelected(frameURL)
-                    }
+                    // Import all extracted frames at once (navigates to first frame)
+                    onImagesSelected(frameURLs)
                     dismiss()
                 }
             } catch {
@@ -427,6 +426,7 @@ import AppKit
 struct ImagePickerView: View {
     @Environment(\.dismiss) private var dismiss
     let onImageSelected: (URL) -> Void
+    let onImagesSelected: ([URL]) -> Void
     let onFolderSelected: (URL) -> Void
     let onProjectSelected: (URL) -> Void
     let onVideoSelected: (URL) -> Void
@@ -742,10 +742,8 @@ struct ImagePickerView: View {
 
                 await MainActor.run {
                     isExtractingFrames = false
-                    // Import extracted frames
-                    for frameURL in frameURLs {
-                        onImageSelected(frameURL)
-                    }
+                    // Import all extracted frames at once (navigates to first frame)
+                    onImagesSelected(frameURLs)
                     dismiss()
                 }
             } catch {
@@ -765,6 +763,7 @@ struct ImagePickerView: View {
 #Preview {
     ImagePickerView(
         onImageSelected: { url in print("Image: \(url)") },
+        onImagesSelected: { urls in print("Images: \(urls.count)") },
         onFolderSelected: { url in print("Folder: \(url)") },
         onProjectSelected: { url in print("Project: \(url)") },
         onVideoSelected: { url in print("Video: \(url)") }

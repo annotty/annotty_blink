@@ -50,6 +50,14 @@ protocol InputCoordinatorProtocol: AnyObject {
     /// Called when down arrow pressed to select next line
     var onSelectNextLine: (() -> Void)? { get set }
 
+    // MARK: - Image Navigation Callbacks
+
+    /// Called when left arrow pressed to go to previous image
+    var onPreviousImage: (() -> Void)? { get set }
+
+    /// Called when right arrow pressed to go to next image
+    var onNextImage: (() -> Void)? { get set }
+
     // MARK: - State
 
     /// Whether a line drag is currently in progress

@@ -94,10 +94,24 @@ class CanvasViewModel: ObservableObject {
     /// UserDefaults key for last viewed image
     private static let lastImageNameKey = "annotty.lastImageName"
 
+    /// UserDefaults key for auto-copy setting
+    private static let autoCopySettingKey = "annotty.autoCopyPreviousAnnotation"
+
+    /// Whether to auto-copy annotations from previous image when navigating
+    @Published var autoCopyPreviousAnnotation: Bool = false {
+        didSet {
+            UserDefaults.standard.set(autoCopyPreviousAnnotation, forKey: Self.autoCopySettingKey)
+        }
+    }
+
     // MARK: - Initialization
 
     init() {
         print("🚀 CanvasViewModel init (Blink Annotation Mode)")
+
+        // Load settings from UserDefaults
+        autoCopyPreviousAnnotation = UserDefaults.standard.bool(forKey: Self.autoCopySettingKey)
+
         setupRenderer()
         setupBindings()
         setupGestureCallbacks()
@@ -172,26 +186,43 @@ class CanvasViewModel: ObservableObject {
     }
 
     /// Import a single image to the project (appended at the end)
+    /// Navigates to the imported image after completion
     func importImage(from sourceURL: URL) {
+        importImages(from: [sourceURL])
+    }
+
+    /// Import multiple images to the project (appended at the end)
+    /// Navigates to the FIRST imported image after completion
+    func importImages(from sourceURLs: [URL]) {
+        guard !sourceURLs.isEmpty else { return }
+
         // Save current annotations before import
         if annotationModified {
             saveCurrentAnnotation()
         }
 
-        do {
-            let destinationURL = try ProjectFileService.shared.copyImageToProject(sourceURL)
-            print("[Import] Copied: \(destinationURL.lastPathComponent)")
-
-            // Append to the end instead of reloading (which would sort alphabetically)
-            imageManager.appendImages([destinationURL])
-
-            // Navigate to the newly added image
-            let newIndex = imageManager.items.count - 1
-            imageManager.goTo(index: newIndex)
-            loadCurrentImage()
-        } catch {
-            print("[Import] Failed: \(error)")
+        var copiedURLs: [URL] = []
+        for sourceURL in sourceURLs {
+            do {
+                let destinationURL = try ProjectFileService.shared.copyImageToProject(sourceURL)
+                copiedURLs.append(destinationURL)
+                print("[Import] Copied: \(destinationURL.lastPathComponent)")
+            } catch {
+                print("[Import] Failed for \(sourceURL.lastPathComponent): \(error)")
+            }
         }
+
+        guard !copiedURLs.isEmpty else { return }
+
+        // Append to the end instead of reloading (which would sort alphabetically)
+        imageManager.appendImages(copiedURLs)
+
+        // Navigate to the FIRST newly added image
+        let firstNewIndex = imageManager.items.count - copiedURLs.count
+        imageManager.goTo(index: firstNewIndex)
+        loadCurrentImage()
+
+        print("[Import] Imported \(copiedURLs.count) images, starting at index \(firstNewIndex)")
     }
 
     /// Import all images from a folder (appended at the end)
@@ -320,13 +351,22 @@ class CanvasViewModel: ObservableObject {
             self?.redo()
         }
 
-        // Line selection callbacks (arrow keys)
+        // Line selection callbacks (up/down arrow keys)
         gestureCoordinator.onSelectPreviousLine = { [weak self] in
             self?.selectPreviousLine()
         }
 
         gestureCoordinator.onSelectNextLine = { [weak self] in
             self?.selectNextLine()
+        }
+
+        // Image navigation callbacks (left/right arrow keys)
+        gestureCoordinator.onPreviousImage = { [weak self] in
+            self?.previousImage()
+        }
+
+        gestureCoordinator.onNextImage = { [weak self] in
+            self?.nextImage()
         }
     }
 
@@ -414,6 +454,9 @@ class CanvasViewModel: ObservableObject {
             self.undoStack.removeAll()
             self.redoStack.removeAll()
 
+            // Reset line selection to first line (right pupil vertical)
+            self.selectedLineType = .rightPupilVertical
+
             // Fit image to view after loading
             self.resetView()
 
@@ -491,6 +534,9 @@ class CanvasViewModel: ObservableObject {
 
     /// Begin dragging the selected line
     func beginLineDrag(at point: CGPoint) {
+        // Create annotation on first canvas interaction if not exists
+        createAnnotationIfNeeded()
+
         guard currentAnnotation != nil else { return }
 
         isDraggingLine = true
@@ -568,14 +614,30 @@ class CanvasViewModel: ObservableObject {
 
     /// Inherit annotation from previous frame (if exists)
     func inheritFromPreviousFrame() {
-        guard currentImageIndex > 0,
-              let currentName = currentImageName else { return }
+        print("[ApplyPrevious] Called - currentImageIndex: \(currentImageIndex)")
+
+        guard currentImageIndex > 0 else {
+            print("[ApplyPrevious] Failed: currentImageIndex <= 0")
+            return
+        }
+
+        guard let currentName = currentImageName else {
+            print("[ApplyPrevious] Failed: currentImageName is nil")
+            return
+        }
+
+        print("[ApplyPrevious] currentName: \(currentName)")
 
         // Get previous image's name
         let previousIndex = currentImageIndex - 1
         guard previousIndex >= 0,
-              previousIndex < imageManager.items.count else { return }
+              previousIndex < imageManager.items.count else {
+            print("[ApplyPrevious] Failed: previousIndex out of bounds")
+            return
+        }
         let previousName = imageManager.items[previousIndex].baseName
+        print("[ApplyPrevious] previousName: \(previousName)")
+        print("[ApplyPrevious] Available annotations: \(Array(annotations.keys))")
 
         if let previousAnnotation = annotations[previousName] {
             var newAnnotation = previousAnnotation
@@ -583,16 +645,39 @@ class CanvasViewModel: ObservableObject {
             currentAnnotation = newAnnotation
             annotations[currentName] = newAnnotation
             annotationModified = true
-            print("[Inherit] Copied annotation from \(previousName)")
+            print("[ApplyPrevious] ✅ Copied annotation from \(previousName) to \(currentName)")
+        } else {
+            print("[ApplyPrevious] ❌ No annotation found for previousName: \(previousName)")
         }
     }
 
-    /// Load or create annotation for an image
+    /// Load annotation for an image (does NOT create if not exists)
+    ///
+    /// Annotation loading behavior:
+    /// 1. If existing annotation exists, use it
+    /// 2. Otherwise, set currentAnnotation to nil (annotation created on first canvas click)
     private func loadOrCreateAnnotation(for imageName: String) {
+        // Use existing annotation if available
         if let existing = annotations[imageName] {
             currentAnnotation = existing
-        } else {
-            // Try to inherit from previous frame
+            print("[Annotation] Loaded existing for \(imageName)")
+            return
+        }
+
+        // No annotation yet - will be created on first canvas interaction
+        currentAnnotation = nil
+        print("[Annotation] No annotation for \(imageName) (will create on click)")
+    }
+
+    /// Create annotation for current image (called on first canvas interaction)
+    ///
+    /// If auto-copy is ON, copies from previous image; otherwise creates default
+    func createAnnotationIfNeeded() {
+        guard currentAnnotation == nil,
+              let imageName = currentImageName else { return }
+
+        // Auto-copy from previous image (if enabled)
+        if autoCopyPreviousAnnotation {
             let previousIndex = currentImageIndex - 1
             if previousIndex >= 0 && previousIndex < imageManager.items.count {
                 let previousName = imageManager.items[previousIndex].baseName
@@ -601,15 +686,16 @@ class CanvasViewModel: ObservableObject {
                     inherited.imageName = imageName
                     currentAnnotation = inherited
                     annotations[imageName] = inherited
-                    print("[Annotation] Inherited from \(previousName)")
+                    print("[Annotation] Created (auto-copied from \(previousName))")
                     return
                 }
             }
-            // Create new default annotation
-            currentAnnotation = BlinkAnnotation.defaultAnnotation(imageName: imageName)
-            annotations[imageName] = currentAnnotation
-            print("[Annotation] Created new default for \(imageName)")
         }
+
+        // Create new default annotation
+        currentAnnotation = BlinkAnnotation.defaultAnnotation(imageName: imageName)
+        annotations[imageName] = currentAnnotation
+        print("[Annotation] Created default for \(imageName)")
     }
 
     // MARK: - Navigation Gesture Handling
@@ -621,6 +707,7 @@ class CanvasViewModel: ObservableObject {
     }
 
     func handlePinchDelta(scale: CGFloat, at center: CGPoint) {
+        print("[ViewModel] handlePinchDelta scale: \(scale)")
         let screenCenter = renderer?.convertTouchToScreen(center) ?? center
         renderer?.canvasTransform.applyPinch(scaleFactor: scale, center: screenCenter)
         currentScale = renderer?.canvasTransform.scale ?? 1.0
@@ -696,6 +783,33 @@ class CanvasViewModel: ObservableObject {
         annotations[imageName] = currentAnnotation
         annotationModified = true
         print("[Clear] Reset annotations to default")
+    }
+
+    /// Reset all data (images, annotations, JSON)
+    func resetAll() {
+        // Clear files on disk
+        do {
+            try ProjectFileService.shared.clearAllData()
+            BlinkAnnotationLoader.shared.deleteAnnotations()
+        } catch {
+            print("[ResetAll] Failed to clear data: \(error)")
+        }
+
+        // Clear in-memory state
+        imageManager.clear()
+        annotations = [:]
+        currentAnnotation = nil
+        undoStack = []
+        redoStack = []
+        annotationModified = false
+
+        // Reset display
+        renderer?.clearImage()
+        currentImageIndex = 0
+        totalImageCount = 0
+        transformVersion += 1
+
+        print("[ResetAll] All data has been reset")
     }
 
     // MARK: - Save/Load

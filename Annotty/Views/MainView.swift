@@ -30,11 +30,11 @@ struct MainView: View {
                 onNext: { viewModel.nextImage() },
                 onGoTo: { index in viewModel.goToImage(index: index) },
                 onResetView: { viewModel.resetView() },
-                onClear: { viewModel.clearAllAnnotations() },
                 onExport: { showingExportSheet = true },
                 onLoad: { showingImagePicker = true },
                 onReload: { viewModel.reloadImagesFromProject() },
-                onDeleteImage: { viewModel.deleteCurrentImage() }
+                onDeleteImage: { viewModel.deleteCurrentImage() },
+                onApplyPrevious: { viewModel.inheritFromPreviousFrame() }
             )
 
             // Main content area
@@ -64,7 +64,9 @@ struct MainView: View {
                 ImageSettingsOverlayView(
                     isPresented: $showingImageSettings,
                     imageContrast: $viewModel.imageContrast,
-                    imageBrightness: $viewModel.imageBrightness
+                    imageBrightness: $viewModel.imageBrightness,
+                    autoCopyPreviousAnnotation: $viewModel.autoCopyPreviousAnnotation,
+                    onAllReset: { viewModel.resetAll() }
                 )
                 .transition(.move(edge: .trailing))
             }
@@ -73,6 +75,9 @@ struct MainView: View {
             ImagePickerView(
                 onImageSelected: { url in
                     viewModel.importImage(from: url)
+                },
+                onImagesSelected: { urls in
+                    viewModel.importImages(from: urls)
                 },
                 onFolderSelected: { url in
                     viewModel.importImagesFromFolder(url)

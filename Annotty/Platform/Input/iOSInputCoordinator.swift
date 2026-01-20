@@ -18,6 +18,8 @@ class iOSInputCoordinator: NSObject, InputCoordinatorProtocol {
     var onRedo: (() -> Void)?
     var onSelectPreviousLine: (() -> Void)?  // Triggered via hardware keyboard shortcuts
     var onSelectNextLine: (() -> Void)?      // Triggered via hardware keyboard shortcuts
+    var onPreviousImage: (() -> Void)?       // Triggered via hardware keyboard shortcuts
+    var onNextImage: (() -> Void)?           // Triggered via hardware keyboard shortcuts
 
     // MARK: - State
 
@@ -213,7 +215,21 @@ class iOSInputCoordinator: NSObject, InputCoordinatorProtocol {
         switch gesture.state {
         case .changed:
             let translation = gesture.translation(in: view)
-            onPan?(translation)
+            let center = gesture.location(in: view)
+
+            // X方向: パン（画像移動）
+            if abs(translation.x) > 0 {
+                onPan?(CGPoint(x: translation.x, y: 0))
+            }
+
+            // Y方向: ズーム（上スワイプ = ズームイン、下スワイプ = ズームアウト）
+            if abs(translation.y) > 0 {
+                // Y移動量をスケール倍率に変換（感度調整）
+                let zoomSensitivity: CGFloat = 0.005
+                let scale = 1.0 - (translation.y * zoomSensitivity)
+                onPinch?(scale, center)
+            }
+
             gesture.setTranslation(.zero, in: view)
         case .ended, .cancelled:
             lastNavigationGestureTime = Date()

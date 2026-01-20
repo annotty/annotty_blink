@@ -2,10 +2,13 @@ import SwiftUI
 
 /// Represents a complete blink annotation for a single image
 /// Contains positions for 12 annotation lines (6 per eye)
-struct BlinkAnnotation: Codable, Equatable {
+///
+/// JSON format outputs `null` for hidden lines (not included in training data)
+/// The `visibility` field is internal-only and not serialized
+struct BlinkAnnotation: Equatable {
     var leftEye: EyeLinePositions
     var rightEye: EyeLinePositions
-    var visibility: LineVisibility
+    var visibility: LineVisibility  // Internal only - not serialized to JSON
     /// Image filename (without extension) - used as the unique identifier
     var imageName: String
 
@@ -17,6 +20,33 @@ struct BlinkAnnotation: Codable, Equatable {
             visibility: LineVisibility(),
             imageName: imageName
         )
+    }
+
+    // MARK: - Custom Codable (null for hidden lines)
+
+    private enum CodingKeys: String, CodingKey {
+        case leftEye, rightEye, imageName
+        // visibility is excluded from JSON
+    }
+
+    /// Intermediate struct for encoding eye positions with null support
+    private struct EncodableEyePositions: Encodable {
+        let pupilVerticalX: CGFloat?
+        let pupilHorizontalY: CGFloat?
+        let upperBrowY: CGFloat?
+        let lowerBrowY: CGFloat?
+        let upperLidY: CGFloat?
+        let lowerLidY: CGFloat?
+    }
+
+    /// Intermediate struct for decoding eye positions with null support
+    private struct DecodableEyePositions: Decodable {
+        let pupilVerticalX: CGFloat?
+        let pupilHorizontalY: CGFloat?
+        let upperBrowY: CGFloat?
+        let lowerBrowY: CGFloat?
+        let upperLidY: CGFloat?
+        let lowerLidY: CGFloat?
     }
 
     /// Get position value for a specific line type (normalized 0-1)
@@ -84,6 +114,81 @@ struct BlinkAnnotation: Codable, Equatable {
     /// Check if a line is visible
     func isLineVisible(_ lineType: BlinkLineType) -> Bool {
         return visibility.isVisible(lineType)
+    }
+}
+
+// MARK: - Codable Conformance
+
+extension BlinkAnnotation: Codable {
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(imageName, forKey: .imageName)
+
+        // Encode left eye with visibility-based null values
+        let leftEncodable = EncodableEyePositions(
+            pupilVerticalX: visibility.isVisible(.leftPupilVertical) ? leftEye.pupilVerticalX : nil,
+            pupilHorizontalY: visibility.isVisible(.leftPupilHorizontal) ? leftEye.pupilHorizontalY : nil,
+            upperBrowY: visibility.isVisible(.leftUpperBrow) ? leftEye.upperBrowY : nil,
+            lowerBrowY: visibility.isVisible(.leftLowerBrow) ? leftEye.lowerBrowY : nil,
+            upperLidY: visibility.isVisible(.leftUpperLid) ? leftEye.upperLidY : nil,
+            lowerLidY: visibility.isVisible(.leftLowerLid) ? leftEye.lowerLidY : nil
+        )
+        try container.encode(leftEncodable, forKey: .leftEye)
+
+        // Encode right eye with visibility-based null values
+        let rightEncodable = EncodableEyePositions(
+            pupilVerticalX: visibility.isVisible(.rightPupilVertical) ? rightEye.pupilVerticalX : nil,
+            pupilHorizontalY: visibility.isVisible(.rightPupilHorizontal) ? rightEye.pupilHorizontalY : nil,
+            upperBrowY: visibility.isVisible(.rightUpperBrow) ? rightEye.upperBrowY : nil,
+            lowerBrowY: visibility.isVisible(.rightLowerBrow) ? rightEye.lowerBrowY : nil,
+            upperLidY: visibility.isVisible(.rightUpperLid) ? rightEye.upperLidY : nil,
+            lowerLidY: visibility.isVisible(.rightLowerLid) ? rightEye.lowerLidY : nil
+        )
+        try container.encode(rightEncodable, forKey: .rightEye)
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        imageName = try container.decode(String.self, forKey: .imageName)
+
+        // Decode left eye (null values become default positions)
+        let leftDecoded = try container.decode(DecodableEyePositions.self, forKey: .leftEye)
+        let defaultLeft = EyeLinePositions.defaultLeft()
+        leftEye = EyeLinePositions(
+            pupilVerticalX: leftDecoded.pupilVerticalX ?? defaultLeft.pupilVerticalX,
+            pupilHorizontalY: leftDecoded.pupilHorizontalY ?? defaultLeft.pupilHorizontalY,
+            upperBrowY: leftDecoded.upperBrowY ?? defaultLeft.upperBrowY,
+            lowerBrowY: leftDecoded.lowerBrowY ?? defaultLeft.lowerBrowY,
+            upperLidY: leftDecoded.upperLidY ?? defaultLeft.upperLidY,
+            lowerLidY: leftDecoded.lowerLidY ?? defaultLeft.lowerLidY
+        )
+
+        // Decode right eye (null values become default positions)
+        let rightDecoded = try container.decode(DecodableEyePositions.self, forKey: .rightEye)
+        let defaultRight = EyeLinePositions.defaultRight()
+        rightEye = EyeLinePositions(
+            pupilVerticalX: rightDecoded.pupilVerticalX ?? defaultRight.pupilVerticalX,
+            pupilHorizontalY: rightDecoded.pupilHorizontalY ?? defaultRight.pupilHorizontalY,
+            upperBrowY: rightDecoded.upperBrowY ?? defaultRight.upperBrowY,
+            lowerBrowY: rightDecoded.lowerBrowY ?? defaultRight.lowerBrowY,
+            upperLidY: rightDecoded.upperLidY ?? defaultRight.upperLidY,
+            lowerLidY: rightDecoded.lowerLidY ?? defaultRight.lowerLidY
+        )
+
+        // Restore visibility from null values (null = hidden)
+        visibility = LineVisibility()
+        if leftDecoded.pupilVerticalX == nil { visibility.setVisible(.leftPupilVertical, visible: false) }
+        if leftDecoded.pupilHorizontalY == nil { visibility.setVisible(.leftPupilHorizontal, visible: false) }
+        if leftDecoded.upperBrowY == nil { visibility.setVisible(.leftUpperBrow, visible: false) }
+        if leftDecoded.lowerBrowY == nil { visibility.setVisible(.leftLowerBrow, visible: false) }
+        if leftDecoded.upperLidY == nil { visibility.setVisible(.leftUpperLid, visible: false) }
+        if leftDecoded.lowerLidY == nil { visibility.setVisible(.leftLowerLid, visible: false) }
+        if rightDecoded.pupilVerticalX == nil { visibility.setVisible(.rightPupilVertical, visible: false) }
+        if rightDecoded.pupilHorizontalY == nil { visibility.setVisible(.rightPupilHorizontal, visible: false) }
+        if rightDecoded.upperBrowY == nil { visibility.setVisible(.rightUpperBrow, visible: false) }
+        if rightDecoded.lowerBrowY == nil { visibility.setVisible(.rightLowerBrow, visible: false) }
+        if rightDecoded.upperLidY == nil { visibility.setVisible(.rightUpperLid, visible: false) }
+        if rightDecoded.lowerLidY == nil { visibility.setVisible(.rightLowerLid, visible: false) }
     }
 }
 

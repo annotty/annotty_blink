@@ -11,9 +11,10 @@ class TouchableMTKView: MTKView {
     /// Gesture coordinator for handling drawing vs navigation
     var gestureCoordinator: iOSInputCoordinator?
 
-    /// Hardware keyboard commands for line navigation on iPad + Mac
+    /// Hardware keyboard commands for line/image navigation on iPad + Mac
     override var keyCommands: [UIKeyCommand]? {
         [
+            // Line selection (up/down)
             UIKeyCommand(
                 input: UIKeyCommand.inputUpArrow,
                 modifierFlags: [],
@@ -24,6 +25,18 @@ class TouchableMTKView: MTKView {
                 modifierFlags: [],
                 action: #selector(handleArrowKey(_:))
             ),
+            // Image navigation (left/right)
+            UIKeyCommand(
+                input: UIKeyCommand.inputLeftArrow,
+                modifierFlags: [],
+                action: #selector(handleArrowKey(_:))
+            ),
+            UIKeyCommand(
+                input: UIKeyCommand.inputRightArrow,
+                modifierFlags: [],
+                action: #selector(handleArrowKey(_:))
+            ),
+            // Alternative keys
             UIKeyCommand(
                 input: "a",
                 modifierFlags: [],
@@ -73,19 +86,28 @@ class TouchableMTKView: MTKView {
     }
 
     @objc private func handleArrowKey(_ command: UIKeyCommand) {
-        guard let input = command.input?.lowercased() else { return }
+        guard let input = command.input else { return }
 
+        // Check arrow keys first (don't lowercase special key constants)
         switch input {
         case UIKeyCommand.inputUpArrow:
             gestureCoordinator?.onSelectPreviousLine?()
         case UIKeyCommand.inputDownArrow:
             gestureCoordinator?.onSelectNextLine?()
-        case "a":
-            gestureCoordinator?.onSelectPreviousLine?()
-        case "z":
-            gestureCoordinator?.onSelectNextLine?()
+        case UIKeyCommand.inputLeftArrow:
+            gestureCoordinator?.onPreviousImage?()
+        case UIKeyCommand.inputRightArrow:
+            gestureCoordinator?.onNextImage?()
         default:
-            break
+            // For letter keys, compare lowercased
+            switch input.lowercased() {
+            case "a":
+                gestureCoordinator?.onSelectPreviousLine?()
+            case "z":
+                gestureCoordinator?.onSelectNextLine?()
+            default:
+                break
+            }
         }
     }
 }
@@ -163,7 +185,23 @@ class MouseMTKView: MTKView {
     }
 
     private func setupView() {
-        // Enable mouse tracking
+        // Enable indirect touches for trackpad gestures (pinch/rotate)
+        if #available(macOS 10.12.2, *) {
+            allowedTouchTypes = [.indirect]
+            wantsRestingTouches = true
+        }
+        
+        // Initial tracking area setup
+        updateTrackingAreas()
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        
+        // Remove all existing tracking areas to avoid duplicates
+        trackingAreas.forEach { removeTrackingArea($0) }
+        
+        // Create new tracking area with current bounds
         let trackingArea = NSTrackingArea(
             rect: bounds,
             options: [.activeInKeyWindow, .mouseMoved, .inVisibleRect],
@@ -171,6 +209,10 @@ class MouseMTKView: MTKView {
             userInfo: nil
         )
         addTrackingArea(trackingArea)
+    }
+    
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        return true
     }
 
     override var acceptsFirstResponder: Bool { true }
@@ -202,7 +244,14 @@ class MouseMTKView: MTKView {
     }
 
     override func scrollWheel(with event: NSEvent) {
+        print("[View] MouseMTKView received scrollWheel")
         inputCoordinator?.scrollWheel(with: event)
+    }
+    
+    override func magnify(with event: NSEvent) {
+        print("[View] MouseMTKView received magnify")
+        inputCoordinator?.magnify(with: event)
+        super.magnify(with: event)
     }
 
     // MARK: - Keyboard Events
@@ -248,6 +297,7 @@ struct MetalCanvasView: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: MouseMTKView, context: Context) {
+        // print("[View] MetalCanvasView updateNSView called - triggering display")
         nsView.needsDisplay = true
     }
 

@@ -10,11 +10,11 @@ struct TopBarView: View {
     let onNext: () -> Void
     let onGoTo: (Int) -> Void
     let onResetView: () -> Void
-    let onClear: () -> Void
     let onExport: () -> Void
     let onLoad: () -> Void
     let onReload: () -> Void
     var onDeleteImage: (() -> Void)? = nil
+    var onApplyPrevious: (() -> Void)? = nil
 
     var body: some View {
         HStack {
@@ -51,7 +51,8 @@ struct TopBarView: View {
                 onPrevious: onPrevious,
                 onNext: onNext,
                 onGoTo: onGoTo,
-                onDelete: onDeleteImage
+                onDelete: onDeleteImage,
+                onApplyPrevious: onApplyPrevious
             )
 
             // Loading/Saving indicator (fixed width to prevent layout shift)
@@ -78,21 +79,6 @@ struct TopBarView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(Color.gray.opacity(0.6))
-                .foregroundColor(.white)
-                .cornerRadius(8)
-            }
-            .buttonStyle(.plain)
-            .disabled(totalCount == 0)
-
-            // Clear annotation button
-            Button(action: onClear) {
-                HStack(spacing: 4) {
-                    Image(systemName: "trash")
-                    Text("Clear")
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(Color.red.opacity(0.7))
                 .foregroundColor(.white)
                 .cornerRadius(8)
             }
@@ -132,10 +118,10 @@ struct TopBarView: View {
         onNext: {},
         onGoTo: { _ in },
         onResetView: {},
-        onClear: {},
         onExport: {},
         onLoad: {},
         onReload: {},
-        onDeleteImage: {}
+        onDeleteImage: {},
+        onApplyPrevious: {}
     )
 }

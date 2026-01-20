@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Image navigation controls (◀ 12/128 ▶ 🗑)
+/// Image navigation controls (◀ 12/128 ▶ 🗑 ⬅)
 struct ImageNavigatorView: View {
     let currentIndex: Int
     let totalCount: Int
@@ -8,6 +8,7 @@ struct ImageNavigatorView: View {
     let onNext: () -> Void
     var onGoTo: ((Int) -> Void)? = nil
     var onDelete: (() -> Void)? = nil
+    var onApplyPrevious: (() -> Void)? = nil
 
     @State private var showingJumpPopover = false
     @State private var sliderValue: Double = 0
@@ -72,6 +73,27 @@ struct ImageNavigatorView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(totalCount == 0)
+            }
+
+            // Apply Previous button (copy annotation from previous image)
+            if onApplyPrevious != nil {
+                Divider()
+                    .frame(height: 24)
+                    .background(Color.gray.opacity(0.5))
+
+                Button(action: {
+                    onApplyPrevious?()
+                }) {
+                    Text("前の画像からコピー")
+                        .font(.caption)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                        .background(currentIndex > 0 ? Color.cyan.opacity(0.8) : Color.gray.opacity(0.3))
+                        .foregroundColor(currentIndex > 0 ? .white : .gray)
+                        .cornerRadius(6)
+                }
+                .buttonStyle(.plain)
+                .disabled(currentIndex <= 0)
             }
         }
         .padding(.horizontal, 16)
@@ -148,7 +170,8 @@ struct ImageNavigatorView: View {
         onPrevious: {},
         onNext: {},
         onGoTo: { index in print("Go to: \(index)") },
-        onDelete: { print("Delete") }
+        onDelete: { print("Delete") },
+        onApplyPrevious: { print("Apply Previous") }
     )
     .background(Color(white: 0.1))
 }
