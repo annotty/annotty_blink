@@ -61,10 +61,11 @@ class iOSInputCoordinator: NSObject, InputCoordinatorProtocol {
         view.addGestureRecognizer(threeFingerTap)
         threeFingerTapGesture = threeFingerTap
 
-        // Pan gesture (2 fingers for navigation)
+        // Pan gesture (2 fingers for navigation, also accepts trackpad scroll)
         let pan = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
         pan.minimumNumberOfTouches = 2
         pan.maximumNumberOfTouches = 2
+        pan.allowedScrollTypesMask = [.continuous]
         pan.delegate = self
         view.addGestureRecognizer(pan)
         panGesture = pan
@@ -215,20 +216,10 @@ class iOSInputCoordinator: NSObject, InputCoordinatorProtocol {
         switch gesture.state {
         case .changed:
             let translation = gesture.translation(in: view)
-            let center = gesture.location(in: view)
-
-            // X方向: パン（画像移動）
-            if abs(translation.x) > 0 {
-                onPan?(CGPoint(x: translation.x, y: 0))
-            }
-
-            // Y方向: ズーム（上スワイプ = ズームイン、下スワイプ = ズームアウト）
-            if abs(translation.y) > 0 {
-                // Y移動量をスケール倍率に変換（感度調整）
-                let zoomSensitivity: CGFloat = 0.005
-                let scale = 1.0 - (translation.y * zoomSensitivity)
-                onPinch?(scale, center)
-            }
+            
+            // X/Y方向: パン（画像移動）
+            // 2本指スワイプは常に移動として扱う（ズームはピンチで行う）
+            onPan?(translation)
 
             gesture.setTranslation(.zero, in: view)
         case .ended, .cancelled:

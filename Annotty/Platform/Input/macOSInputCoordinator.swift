@@ -143,22 +143,13 @@ class macOSInputCoordinator: NSObject, InputCoordinatorProtocol {
             lastNavigationGestureTime = Date()
 
         } else {
-            // Default: Vertical = Zoom, Horizontal = Pan
+            // Default: Scroll = Pan (X and Y)
             let deltaY = event.scrollingDeltaY
             let deltaX = event.scrollingDeltaX
-
-            // Vertical scroll → Zoom (swipe up = zoom in, swipe down = zoom out)
-            if abs(deltaY) > 0.1 {
-                let zoomDelta = deltaY * 0.01
-                let scale = 1.0 + zoomDelta
-                onPinch?(scale, location)
-            }
-
-            // Horizontal scroll → Pan
-            if abs(deltaX) > 0.1 {
-                let translation = CGPoint(x: deltaX, y: 0)
-                onPan?(translation)
-            }
+            
+            // Trackpad scroll acts as Pan
+            let translation = CGPoint(x: deltaX, y: deltaY)
+            onPan?(translation)
 
             lastNavigationGestureTime = Date()
         }
