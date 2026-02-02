@@ -17,6 +17,7 @@ struct TopBarView: View {
     var onApplyPrevious: (() -> Void)? = nil
     var onUndo: (() -> Void)? = nil
     var onRedo: (() -> Void)? = nil
+    var onClearAnnotation: (() -> Void)? = nil
 
     @State private var showingHelp = false
 
@@ -110,6 +111,21 @@ struct TopBarView: View {
             .sheet(isPresented: $showingHelp) {
                 HelpSheetView()
             }
+
+            // Clear annotation button
+            Button(action: { onClearAnnotation?() }) {
+                HStack(spacing: 4) {
+                    Image(systemName: "xmark.circle")
+                    Text("Clear")
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.orange.opacity(0.8))
+                .foregroundColor(.white)
+                .cornerRadius(8)
+            }
+            .buttonStyle(.plain)
+            .disabled(totalCount == 0)
 
             // Fit view button (reset pan/zoom/rotation)
             Button(action: onResetView) {
@@ -234,6 +250,7 @@ private struct HelpSheetView: View {
         onLoad: {},
         onReload: {},
         onDeleteImage: {},
-        onApplyPrevious: {}
+        onApplyPrevious: {},
+        onClearAnnotation: {}
     )
 }

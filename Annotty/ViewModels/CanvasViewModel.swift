@@ -942,16 +942,17 @@ class CanvasViewModel: ObservableObject {
         annotationModified = true
     }
 
-    /// Clear all annotations for current image
+    /// Clear all annotations for current image (removes annotation entirely)
     func clearAllAnnotations() {
         guard currentAnnotation != nil,
               let imageName = currentImageName else { return }
 
         pushUndoState()
-        currentAnnotation = BlinkAnnotation.defaultAnnotation(imageName: imageName)
-        annotations[imageName] = currentAnnotation
-        annotationModified = true
-        print("[Clear] Reset annotations to default")
+        currentAnnotation = nil
+        annotations.removeValue(forKey: imageName)
+        annotationModified = false
+        saveAllAnnotations()
+        print("[Clear] Removed annotation for \(imageName)")
     }
 
     /// Reset all data (images, annotations, JSON)

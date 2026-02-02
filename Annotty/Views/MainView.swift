@@ -36,7 +36,8 @@ struct MainView: View {
                 onDeleteImage: { viewModel.deleteCurrentImage() },
                 onApplyPrevious: { viewModel.inheritFromPreviousFrame() },
                 onUndo: { viewModel.undo() },
-                onRedo: { viewModel.redo() }
+                onRedo: { viewModel.redo() },
+                onClearAnnotation: { viewModel.clearAllAnnotations() }
             )
 
             // Main content area
