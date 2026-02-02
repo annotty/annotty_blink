@@ -42,12 +42,20 @@ protocol InputCoordinatorProtocol: AnyObject {
     /// Called when redo action triggered
     var onRedo: (() -> Void)? { get set }
 
-    // MARK: - Selection Callbacks
+    // MARK: - Line Nudge Callbacks
 
-    /// Called when up arrow pressed to select previous line
+    /// Called when up arrow pressed to nudge line position upward
+    var onNudgeLineUp: (() -> Void)? { get set }
+
+    /// Called when down arrow pressed to nudge line position downward
+    var onNudgeLineDown: (() -> Void)? { get set }
+
+    // MARK: - Line Selection Callbacks
+
+    /// Called when A key pressed to select previous line
     var onSelectPreviousLine: (() -> Void)? { get set }
 
-    /// Called when down arrow pressed to select next line
+    /// Called when Z key pressed to select next line
     var onSelectNextLine: (() -> Void)? { get set }
 
     // MARK: - Image Navigation Callbacks

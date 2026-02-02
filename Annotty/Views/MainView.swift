@@ -34,7 +34,9 @@ struct MainView: View {
                 onLoad: { showingImagePicker = true },
                 onReload: { viewModel.reloadImagesFromProject() },
                 onDeleteImage: { viewModel.deleteCurrentImage() },
-                onApplyPrevious: { viewModel.inheritFromPreviousFrame() }
+                onApplyPrevious: { viewModel.inheritFromPreviousFrame() },
+                onUndo: { viewModel.undo() },
+                onRedo: { viewModel.redo() }
             )
 
             // Main content area

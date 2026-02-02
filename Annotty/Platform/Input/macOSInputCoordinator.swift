@@ -16,6 +16,8 @@ class macOSInputCoordinator: NSObject, InputCoordinatorProtocol {
     var onRotation: ((CGFloat, CGPoint) -> Void)?
     var onUndo: (() -> Void)?
     var onRedo: (() -> Void)?
+    var onNudgeLineUp: (() -> Void)?
+    var onNudgeLineDown: (() -> Void)?
     var onSelectPreviousLine: (() -> Void)?
     var onSelectNextLine: (() -> Void)?
     var onPreviousImage: (() -> Void)?
@@ -179,17 +181,17 @@ class macOSInputCoordinator: NSObject, InputCoordinatorProtocol {
             return true
         }
 
-        // Arrow keys for line selection (no command/option modifiers)
+        // Arrow keys for line nudge and image navigation (no command/option modifiers)
         if modifiers.contains(.command) || modifiers.contains(.option) {
             return false
         }
 
         switch event.keyCode {
         case 126: // Up arrow
-            onSelectPreviousLine?()
+            onNudgeLineUp?()
             return true
         case 125: // Down arrow
-            onSelectNextLine?()
+            onNudgeLineDown?()
             return true
         case 123: // Left arrow
             onPreviousImage?()
@@ -201,7 +203,7 @@ class macOSInputCoordinator: NSObject, InputCoordinatorProtocol {
             break
         }
 
-        // Letter keys (A/Z) for the same navigation when arrows aren't convenient
+        // Letter keys (A/Z) for line selection
         if let character = event.charactersIgnoringModifiers?.lowercased(), character.count == 1 {
             switch character {
             case "a":

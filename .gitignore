@@ -21,3 +21,6 @@ Pods/
 # Swift Package Manager
 .build/
 .swiftpm/
+
+# ML Model
+Model/

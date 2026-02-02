@@ -74,20 +74,29 @@ struct CanvasContainerView: View {
     }
 
     /// Drag indicator showing line movement direction
+    /// Drag indicator showing line movement direction
     private var dragIndicator: some View {
         let lineType = viewModel.selectedLineType
         let direction = lineType.isVertical ? "↔" : "↕"
 
         return VStack {
-            Spacer()
-            HStack {
-                Spacer()
+            HStack(spacing: 4) {
                 Text(direction)
-                    .font(.system(size: 32, weight: .bold))
+                    .font(.system(size: 24, weight: .bold)) // Slightly smaller than 32
                     .foregroundColor(lineType.color)
-                    .shadow(color: .black, radius: 2)
+                    .shadow(color: .black, radius: 1)
+                
+                Text(lineType.isVertical ? "Move Horizontally" : "Move Vertically")
+                    .font(.caption)
+                    .foregroundColor(.white)
+                
                 Spacer()
             }
+            .padding(8)
+            .background(Color.black.opacity(0.6))
+            .cornerRadius(8)
+            .padding(8) // Margin from screen edges
+            
             Spacer()
         }
     }

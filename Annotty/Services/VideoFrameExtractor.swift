@@ -41,7 +41,7 @@ class VideoFrameExtractor {
     func extractFrames(
         from videoURL: URL,
         fps: Double,
-        progress: @escaping (Double) -> Void
+        progress: @MainActor @Sendable @escaping (Double) -> Void
     ) async throws -> [URL] {
         let asset = AVAsset(url: videoURL)
 
@@ -86,25 +86,26 @@ class VideoFrameExtractor {
         var extractedURLs: [URL] = []
 
         for (index, time) in frameTimes.enumerated() {
-            do {
-                let cgImage = try imageGenerator.copyCGImage(at: time, actualTime: nil)
+            autoreleasepool {
+                do {
+                    let cgImage = try imageGenerator.copyCGImage(at: time, actualTime: nil)
 
-                // Save as PNG with format: {videoBasename}_frame{number}.png
-                let frameNumber = String(format: "%05d", index)
-                let frameURL = outputDir.appendingPathComponent("\(videoBasename)_frame\(frameNumber).png")
+                    // Save as PNG with format: {videoBasename}_frame{number}.png
+                    let frameNumber = String(format: "%05d", index)
+                    let frameURL = outputDir.appendingPathComponent("\(videoBasename)_frame\(frameNumber).png")
 
-                if saveCGImageAsPNG(cgImage, to: frameURL) {
-                    extractedURLs.append(frameURL)
+                    if saveCGImageAsPNG(cgImage, to: frameURL) {
+                        extractedURLs.append(frameURL)
+                    }
+                } catch {
+                    print("[VideoFrameExtractor] Failed to extract frame \(index): \(error)")
                 }
-
-                // Report progress
-                let currentProgress = Double(index + 1) / Double(totalFrames)
-                progress(currentProgress)
-
-            } catch {
-                print("[VideoFrameExtractor] Failed to extract frame \(index): \(error)")
-                // Continue with next frame instead of failing completely
             }
+
+            // Yield to allow UI updates for progress
+            let currentProgress = Double(index + 1) / Double(totalFrames)
+            await progress(currentProgress)
+            await Task.yield()
         }
 
         print("[VideoFrameExtractor] Successfully extracted \(extractedURLs.count) frames")
@@ -120,7 +121,7 @@ class VideoFrameExtractor {
     func extractFrames(
         from videoURL: URL,
         atTimes times: [Double],
-        progress: @escaping (Double) -> Void
+        progress: @MainActor @Sendable @escaping (Double) -> Void
     ) async throws -> [URL] {
         let asset = AVAsset(url: videoURL)
 
@@ -141,25 +142,28 @@ class VideoFrameExtractor {
         let totalFrames = times.count
 
         for (index, timeSeconds) in times.enumerated() {
-            let cmTime = CMTime(seconds: timeSeconds, preferredTimescale: 600)
+            autoreleasepool {
+                let cmTime = CMTime(seconds: timeSeconds, preferredTimescale: 600)
 
-            do {
-                let cgImage = try imageGenerator.copyCGImage(at: cmTime, actualTime: nil)
+                do {
+                    let cgImage = try imageGenerator.copyCGImage(at: cmTime, actualTime: nil)
 
-                // Save as PNG with format: {videoBasename}_frame{number}.png
-                let frameNumber = String(format: "%05d", index)
-                let frameURL = outputDir.appendingPathComponent("\(videoBasename)_frame\(frameNumber).png")
+                    // Save as PNG with format: {videoBasename}_frame{number}.png
+                    let frameNumber = String(format: "%05d", index)
+                    let frameURL = outputDir.appendingPathComponent("\(videoBasename)_frame\(frameNumber).png")
 
-                if saveCGImageAsPNG(cgImage, to: frameURL) {
-                    extractedURLs.append(frameURL)
+                    if saveCGImageAsPNG(cgImage, to: frameURL) {
+                        extractedURLs.append(frameURL)
+                    }
+                } catch {
+                    print("[VideoFrameExtractor] Failed to extract frame at \(timeSeconds)s: \(error)")
                 }
-
-                let currentProgress = Double(index + 1) / Double(totalFrames)
-                progress(currentProgress)
-
-            } catch {
-                print("[VideoFrameExtractor] Failed to extract frame at \(timeSeconds)s: \(error)")
             }
+
+            // Yield to allow UI updates for progress
+            let currentProgress = Double(index + 1) / Double(totalFrames)
+            await progress(currentProgress)
+            await Task.yield()
         }
 
         return extractedURLs

@@ -16,10 +16,12 @@ class iOSInputCoordinator: NSObject, InputCoordinatorProtocol {
     var onRotation: ((CGFloat, CGPoint) -> Void)?
     var onUndo: (() -> Void)?
     var onRedo: (() -> Void)?
-    var onSelectPreviousLine: (() -> Void)?  // Triggered via hardware keyboard shortcuts
-    var onSelectNextLine: (() -> Void)?      // Triggered via hardware keyboard shortcuts
-    var onPreviousImage: (() -> Void)?       // Triggered via hardware keyboard shortcuts
-    var onNextImage: (() -> Void)?           // Triggered via hardware keyboard shortcuts
+    var onNudgeLineUp: (() -> Void)?        // Up arrow key
+    var onNudgeLineDown: (() -> Void)?      // Down arrow key
+    var onSelectPreviousLine: (() -> Void)? // A key
+    var onSelectNextLine: (() -> Void)?     // Z key
+    var onPreviousImage: (() -> Void)?      // Left arrow key
+    var onNextImage: (() -> Void)?          // Right arrow key
 
     // MARK: - State
 

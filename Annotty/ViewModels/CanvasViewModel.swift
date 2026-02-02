@@ -440,7 +440,16 @@ class CanvasViewModel: ObservableObject {
             self?.redo()
         }
 
-        // Line selection callbacks (up/down arrow keys)
+        // Line nudge callbacks (up/down arrow keys)
+        gestureCoordinator.onNudgeLineUp = { [weak self] in
+            self?.nudgeLineUp()
+        }
+
+        gestureCoordinator.onNudgeLineDown = { [weak self] in
+            self?.nudgeLineDown()
+        }
+
+        // Line selection callbacks (A/Z keys)
         gestureCoordinator.onSelectPreviousLine = { [weak self] in
             self?.selectPreviousLine()
         }
@@ -606,7 +615,41 @@ class CanvasViewModel: ObservableObject {
         annotations[imageName] = annotation
     }
 
-    // MARK: - Line Selection (Arrow Keys)
+    // MARK: - Line Position Nudge (Arrow Keys)
+
+    /// Nudge step: 1px in normalized coordinates based on image height
+    private var nudgeStep: CGFloat {
+        let imageHeight = renderer?.textureManager.imageSize.height ?? 1000
+        return imageHeight > 0 ? 1.0 / imageHeight : 0.001
+    }
+
+    /// Nudge selected line position upward (decrease Y)
+    /// Only applies to horizontal lines; vertical lines (which move left/right) are ignored
+    func nudgeLineUp() {
+        guard !selectedLineType.isVertical else { return }
+        createAnnotationIfNeeded()
+        guard currentAnnotation != nil else { return }
+
+        pushUndoState()
+        let current = getLinePosition(for: selectedLineType)
+        let newPosition = max(0, current - nudgeStep)
+        setLinePosition(for: selectedLineType, value: newPosition)
+    }
+
+    /// Nudge selected line position downward (increase Y)
+    /// Only applies to horizontal lines; vertical lines (which move left/right) are ignored
+    func nudgeLineDown() {
+        guard !selectedLineType.isVertical else { return }
+        createAnnotationIfNeeded()
+        guard currentAnnotation != nil else { return }
+
+        pushUndoState()
+        let current = getLinePosition(for: selectedLineType)
+        let newPosition = min(1, current + nudgeStep)
+        setLinePosition(for: selectedLineType, value: newPosition)
+    }
+
+    // MARK: - Line Selection (A/Z Keys)
 
     /// Select the previous line type (wraps around)
     func selectPreviousLine() {

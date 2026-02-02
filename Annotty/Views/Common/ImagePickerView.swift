@@ -321,7 +321,7 @@ struct ImagePickerView: View {
     private func handleVideoSelection(_ url: URL) {
         let didStartAccessing = url.startAccessingSecurityScopedResource()
 
-        // Copy to temp directory for processing
+        // Copy to temp directory for processing (use FileManager.copyItem to avoid loading entire video into memory)
         do {
             let tempURL = FileManager.default.temporaryDirectory
                 .appendingPathComponent(url.lastPathComponent)
@@ -329,8 +329,7 @@ struct ImagePickerView: View {
             // Remove existing if present
             try? FileManager.default.removeItem(at: tempURL)
 
-            let data = try Data(contentsOf: url)
-            try data.write(to: tempURL)
+            try FileManager.default.copyItem(at: url, to: tempURL)
 
             if didStartAccessing {
                 url.stopAccessingSecurityScopedResource()
@@ -359,15 +358,12 @@ struct ImagePickerView: View {
                 let frameURLs = try await extractor.extractFrames(
                     from: videoURL,
                     fps: selectedFPS
-                ) { progress in
-                    Task { @MainActor in
-                        extractionProgress = progress
-                    }
+                ) { [self] progress in
+                    extractionProgress = progress
                 }
 
                 await MainActor.run {
                     isExtractingFrames = false
-                    // Import all extracted frames at once (navigates to first frame)
                     onImagesSelected(frameURLs)
                     dismiss()
                 }
@@ -735,15 +731,12 @@ struct ImagePickerView: View {
                 let frameURLs = try await extractor.extractFrames(
                     from: videoURL,
                     fps: selectedFPS
-                ) { progress in
-                    Task { @MainActor in
-                        extractionProgress = progress
-                    }
+                ) { [self] progress in
+                    extractionProgress = progress
                 }
 
                 await MainActor.run {
                     isExtractingFrames = false
-                    // Import all extracted frames at once (navigates to first frame)
                     onImagesSelected(frameURLs)
                     dismiss()
                 }

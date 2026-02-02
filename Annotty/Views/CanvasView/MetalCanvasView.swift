@@ -11,10 +11,10 @@ class TouchableMTKView: MTKView {
     /// Gesture coordinator for handling drawing vs navigation
     var gestureCoordinator: iOSInputCoordinator?
 
-    /// Hardware keyboard commands for line/image navigation on iPad + Mac
+    /// Hardware keyboard commands for line nudge and image navigation on iPad + Mac
     override var keyCommands: [UIKeyCommand]? {
         [
-            // Line selection (up/down)
+            // Line nudge (up/down)
             UIKeyCommand(
                 input: UIKeyCommand.inputUpArrow,
                 modifierFlags: [],
@@ -91,9 +91,9 @@ class TouchableMTKView: MTKView {
         // Check arrow keys first (don't lowercase special key constants)
         switch input {
         case UIKeyCommand.inputUpArrow:
-            gestureCoordinator?.onSelectPreviousLine?()
+            gestureCoordinator?.onNudgeLineUp?()
         case UIKeyCommand.inputDownArrow:
-            gestureCoordinator?.onSelectNextLine?()
+            gestureCoordinator?.onNudgeLineDown?()
         case UIKeyCommand.inputLeftArrow:
             gestureCoordinator?.onPreviousImage?()
         case UIKeyCommand.inputRightArrow:

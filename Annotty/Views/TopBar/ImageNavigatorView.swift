@@ -10,20 +10,25 @@ struct ImageNavigatorView: View {
     var onDelete: (() -> Void)? = nil
     var onApplyPrevious: (() -> Void)? = nil
 
+    @Environment(\.horizontalSizeClass) var sizeClass
     @State private var showingJumpPopover = false
     @State private var sliderValue: Double = 0
     @State private var showingDeleteConfirmation = false
+
+    private var isCompact: Bool {
+        sizeClass == .compact
+    }
 
     private var displayIndex: Int {
         totalCount > 0 ? currentIndex + 1 : 0
     }
 
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: isCompact ? 8 : 16) {
             // Previous button
             Button(action: onPrevious) {
                 Image(systemName: "chevron.left")
-                    .font(.title2)
+                    .font(isCompact ? .body : .title2)
                     .foregroundColor(currentIndex > 0 ? .white : .gray)
             }
             .buttonStyle(.plain)
@@ -40,8 +45,8 @@ struct ImageNavigatorView: View {
                     Text("/\(totalCount)")
                         .foregroundColor(.white)
                 }
-                .font(.system(size: 18, weight: .medium, design: .monospaced))
-                .frame(minWidth: 80)
+                .font(.system(size: isCompact ? 14 : 18, weight: .medium, design: .monospaced))
+                .frame(minWidth: isCompact ? 60 : 80)
             }
             .buttonStyle(.plain)
             .disabled(totalCount == 0)
@@ -52,7 +57,7 @@ struct ImageNavigatorView: View {
             // Next button
             Button(action: onNext) {
                 Image(systemName: "chevron.right")
-                    .font(.title2)
+                    .font(isCompact ? .body : .title2)
                     .foregroundColor(currentIndex < totalCount - 1 ? .white : .gray)
             }
             .buttonStyle(.plain)
@@ -61,14 +66,14 @@ struct ImageNavigatorView: View {
             // Delete button (if callback provided)
             if onDelete != nil {
                 Divider()
-                    .frame(height: 24)
+                    .frame(height: isCompact ? 16 : 24)
                     .background(Color.gray.opacity(0.5))
 
                 Button(action: {
                     showingDeleteConfirmation = true
                 }) {
                     Image(systemName: "trash")
-                        .font(.title3)
+                        .font(isCompact ? .body : .title3)
                         .foregroundColor(totalCount > 0 ? .red.opacity(0.8) : .gray)
                 }
                 .buttonStyle(.plain)
@@ -78,26 +83,35 @@ struct ImageNavigatorView: View {
             // Apply Previous button (copy annotation from previous image)
             if onApplyPrevious != nil {
                 Divider()
-                    .frame(height: 24)
+                    .frame(height: isCompact ? 16 : 24)
                     .background(Color.gray.opacity(0.5))
 
                 Button(action: {
                     onApplyPrevious?()
                 }) {
-                    Text("前の画像からコピー")
-                        .font(.caption)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 6)
-                        .background(currentIndex > 0 ? Color.cyan.opacity(0.8) : Color.gray.opacity(0.3))
-                        .foregroundColor(currentIndex > 0 ? .white : .gray)
-                        .cornerRadius(6)
+                    if isCompact {
+                         Image(systemName: "doc.on.doc")
+                            .font(.caption)
+                            .padding(6)
+                            .background(currentIndex > 0 ? Color.cyan.opacity(0.8) : Color.gray.opacity(0.3))
+                            .foregroundColor(currentIndex > 0 ? .white : .gray)
+                            .cornerRadius(6)
+                    } else {
+                        Text("前の画像からコピー")
+                            .font(.caption)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 6)
+                            .background(currentIndex > 0 ? Color.cyan.opacity(0.8) : Color.gray.opacity(0.3))
+                            .foregroundColor(currentIndex > 0 ? .white : .gray)
+                            .cornerRadius(6)
+                    }
                 }
                 .buttonStyle(.plain)
                 .disabled(currentIndex <= 0)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
+        .padding(.horizontal, isCompact ? 8 : 16)
+        .padding(.vertical, isCompact ? 4 : 8)
         .background(Color(white: 0.2))
         .cornerRadius(8)
         .alert("Delete Image?", isPresented: $showingDeleteConfirmation) {
