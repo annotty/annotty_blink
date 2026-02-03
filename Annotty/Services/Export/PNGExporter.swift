@@ -1,11 +1,7 @@
 import Foundation
 import CoreGraphics
-
-#if os(iOS)
-import UIKit
-#elseif os(macOS)
-import AppKit
-#endif
+import ImageIO
+import UniformTypeIdentifiers
 
 /// Export mode for blink annotations
 enum BlinkExportMode {
@@ -16,27 +12,21 @@ enum BlinkExportMode {
 }
 
 /// Exports mask images with blink annotation lines
-class PNGExporter {
+final class PNGExporter: Sendable {
 
-    /// Export a mask image with annotation lines on black background
-    /// - Parameters:
-    ///   - imageURL: URL of the source image (used for dimensions)
-    ///   - annotation: Blink annotation data
-    ///   - outputURL: URL to save the mask image
     func exportMask(
         imageURL: URL,
         annotation: BlinkAnnotation,
         outputURL: URL
     ) throws {
-        // Load source image to get dimensions
-        guard let cgImage = loadCGImage(from: imageURL) else {
+        guard let source = CGImageSourceCreateWithURL(imageURL as CFURL, nil),
+              let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
             throw ExportError.cannotLoadImage
         }
 
         let width = cgImage.width
         let height = cgImage.height
 
-        // Create drawing context
         let colorSpace = CGColorSpaceCreateDeviceRGB()
         let bitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue)
 
@@ -52,54 +42,27 @@ class PNGExporter {
             throw ExportError.cannotCreateContext
         }
 
-        // Fill with black background
         context.setFillColor(CGColor(red: 0, green: 0, blue: 0, alpha: 1))
         context.fill(CGRect(x: 0, y: 0, width: width, height: height))
 
-        // Draw annotation lines on black background
         drawAnnotationLines(context: context, annotation: annotation, width: width, height: height)
 
-        // Save as PNG
         guard let outputImage = context.makeImage() else {
             throw ExportError.cannotCreateImage
         }
 
-        try saveCGImageAsPNG(outputImage, to: outputURL)
-    }
-
-    /// Load CGImage from file URL (cross-platform)
-    private func loadCGImage(from url: URL) -> CGImage? {
-        #if os(iOS)
-        guard let uiImage = UIImage(contentsOfFile: url.path) else {
-            return nil
-        }
-        return uiImage.cgImage
-        #elseif os(macOS)
-        guard let nsImage = NSImage(contentsOfFile: url.path) else {
-            return nil
-        }
-        return nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil)
-        #endif
-    }
-
-    /// Save CGImage as PNG file (cross-platform)
-    private func saveCGImageAsPNG(_ cgImage: CGImage, to url: URL) throws {
-        #if os(iOS)
-        let uiImage = UIImage(cgImage: cgImage)
-        guard let pngData = uiImage.pngData() else {
+        guard let dest = CGImageDestinationCreateWithURL(
+            outputURL as CFURL,
+            UTType.png.identifier as CFString,
+            1,
+            nil
+        ) else {
             throw ExportError.cannotEncodePNG
         }
-        try pngData.write(to: url)
-        #elseif os(macOS)
-        let size = NSSize(width: cgImage.width, height: cgImage.height)
-        let nsImage = NSImage(cgImage: cgImage, size: size)
-        guard let tiffData = nsImage.tiffRepresentation,
-              let bitmap = NSBitmapImageRep(data: tiffData),
-              let pngData = bitmap.representation(using: .png, properties: [:]) else {
+        CGImageDestinationAddImage(dest, outputImage, nil)
+        guard CGImageDestinationFinalize(dest) else {
             throw ExportError.cannotEncodePNG
         }
-        try pngData.write(to: url)
-        #endif
     }
 
     /// Draw all annotation lines on the context
@@ -111,14 +74,12 @@ class PNGExporter {
     ) {
         let lineWidth: CGFloat = 1.0
 
-        // Draw each visible line
         for lineType in BlinkLineType.allCases {
             guard annotation.isLineVisible(lineType) else { continue }
 
             let position = annotation.getLinePosition(for: lineType)
             let color = lineType.rgbColor
 
-            // Set stroke color
             context.setStrokeColor(
                 red: CGFloat(color.r) / 255.0,
                 green: CGFloat(color.g) / 255.0,
@@ -128,19 +89,15 @@ class PNGExporter {
             context.setLineWidth(lineWidth)
 
             if lineType.isVertical {
-                // Vertical line: full height at X position
                 let x = CGFloat(width) * position
 
-                // CoreGraphics has flipped Y (origin at bottom-left)
                 context.move(to: CGPoint(x: x, y: 0))
                 context.addLine(to: CGPoint(x: x, y: CGFloat(height)))
             } else {
-                // Horizontal line: short line centered on vertical line
                 let verticalLine = lineType.verticalLineForEye
                 let verticalX = annotation.getLinePosition(for: verticalLine)
                 let y = CGFloat(height) * position
 
-                // Calculate horizontal extent (10 pixels on each side)
                 let halfWidth = horizontalLineHalfWidth
                 let centerX = CGFloat(width) * verticalX
                 let startX = centerX - halfWidth
@@ -157,19 +114,12 @@ class PNGExporter {
         }
     }
 
-    /// Export annotation as JSON
     func exportAsJSON(annotation: BlinkAnnotation) throws -> Data {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         return try encoder.encode(annotation)
     }
 
-    /// Batch export mask images for all annotations
-    /// - Parameters:
-    ///   - imageURLs: Source image URLs
-    ///   - annotations: Dictionary of image name to annotation
-    ///   - outputDirectory: Directory to save mask images
-    /// - Returns: URLs of exported mask images
     func batchExportMasks(
         imageURLs: [URL],
         annotations: [String: BlinkAnnotation],
@@ -177,16 +127,12 @@ class PNGExporter {
     ) throws -> [URL] {
         var exportedURLs: [URL] = []
 
-        // Create output directory if needed
         try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
 
         for imageURL in imageURLs {
             let baseName = imageURL.deletingPathExtension().lastPathComponent
-
-            // Skip images without annotations
             guard let annotation = annotations[baseName] else { continue }
 
-            // Output as {basename}_label.png
             let outputURL = outputDirectory.appendingPathComponent("\(baseName)_label.png")
 
             try exportMask(

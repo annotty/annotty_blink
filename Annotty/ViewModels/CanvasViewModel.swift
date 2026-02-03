@@ -1016,12 +1016,8 @@ class CanvasViewModel: ObservableObject {
                     throw EyeDetectionError.noEyesDetected
                 }
 
+                guard let self else { return }
                 await MainActor.run {
-                    guard let self = self else { return }
-
-                    // Apply right eye results
-                    // pupilCenter is optional — nil means iris not visible,
-                    // so we skip those lines and let previous-frame values persist
                     if let right = result.rightEye {
                         if let px = right.pupilCenterX {
                             self.setLinePosition(for: .rightPupilVertical, value: px)
@@ -1033,7 +1029,6 @@ class CanvasViewModel: ObservableObject {
                         self.setLinePosition(for: .rightLowerLid, value: right.lowerLidY)
                     }
 
-                    // Apply left eye results
                     if let left = result.leftEye {
                         if let px = left.pupilCenterX {
                             self.setLinePosition(for: .leftPupilVertical, value: px)
@@ -1046,15 +1041,13 @@ class CanvasViewModel: ObservableObject {
                     }
 
                     self.isDetectingEyes = false
-                    print("[EyeDetection] Applied: left=\(result.leftEye != nil), right=\(result.rightEye != nil)")
                 }
             } catch {
+                guard let self else { return }
                 await MainActor.run {
-                    guard let self = self else { return }
                     self.isDetectingEyes = false
                     self.eyeDetectionError = error.localizedDescription
                     self.showEyeDetectionError = true
-                    print("[EyeDetection] Error: \(error)")
                 }
             }
         }

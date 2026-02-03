@@ -257,16 +257,17 @@ struct ExportSheetView: View {
         exportedFolderURL = nil
         exportedFileCount = 0
 
-        // Capture values needed for background task
+        // Capture values on MainActor before entering detached task
         let shouldExportImages = exportImages
         let shouldExportJSON = exportJSON
         let shouldExportMasks = exportMasks
         let annotationsCopy = viewModel.annotations
         let customExportURL = selectedExportURL
+        let projectRoot = ProjectFileService.shared.projectRoot
+        let imageURLs = ProjectFileService.shared.getImageURLs()
+        let exporter = PNGExporter()
 
-        // Use Task.detached to run heavy export work off the main thread
         Task.detached(priority: .userInitiated) {
-            // Start security-scoped access for custom export folder
             let didStartAccessing = customExportURL?.startAccessingSecurityScopedResource() ?? false
             defer {
                 if didStartAccessing {
@@ -277,30 +278,23 @@ struct ExportSheetView: View {
             do {
                 var fileCount = 0
 
-                // Determine base output directory
                 let baseDir: URL
                 if let customURL = customExportURL {
                     baseDir = customURL
-                } else if let projectRoot = ProjectFileService.shared.projectRoot {
-                    baseDir = projectRoot
+                } else if let root = projectRoot {
+                    baseDir = root
                 } else {
                     throw ExportError.outputDirectoryNotFound
                 }
 
-                // Create timestamped export folder
                 let dateFormatter = DateFormatter()
                 dateFormatter.dateFormat = "yyyyMMdd_HHmmss"
                 let timestamp = dateFormatter.string(from: Date())
                 let exportFolderName = "Annotty_export_\(timestamp)"
                 let exportDir = baseDir.appendingPathComponent(exportFolderName)
 
-                print("[Export] Creating export folder: \(exportDir.path)")
                 try FileManager.default.createDirectory(at: exportDir, withIntermediateDirectories: true)
 
-                let imageURLs = ProjectFileService.shared.getImageURLs()
-                let exporter = PNGExporter()
-
-                // Export original images if enabled
                 if shouldExportImages {
                     let imagesDir = exportDir.appendingPathComponent("images")
                     try FileManager.default.createDirectory(at: imagesDir, withIntermediateDirectories: true)
@@ -310,33 +304,28 @@ struct ExportSheetView: View {
                         try FileManager.default.copyItem(at: imageURL, to: destURL)
                         fileCount += 1
                     }
-                    print("[Export] Copied \(imageURLs.count) images")
                 }
 
-                // Export mask images if enabled
                 if shouldExportMasks {
                     let labelsDir = exportDir.appendingPathComponent("labels")
                     try FileManager.default.createDirectory(at: labelsDir, withIntermediateDirectories: true)
 
                     for imageURL in imageURLs {
                         let baseName = imageURL.deletingPathExtension().lastPathComponent
-
-                        guard let annotation = annotationsCopy[baseName] else {
-                            continue
-                        }
+                        guard let annotation = annotationsCopy[baseName] else { continue }
 
                         let outputURL = labelsDir.appendingPathComponent("\(baseName)_label.png")
-                        try exporter.exportMask(
-                            imageURL: imageURL,
-                            annotation: annotation,
-                            outputURL: outputURL
-                        )
+                        try await MainActor.run {
+                            try exporter.exportMask(
+                                imageURL: imageURL,
+                                annotation: annotation,
+                                outputURL: outputURL
+                            )
+                        }
                         fileCount += 1
                     }
-                    print("[Export] Created \(annotationsCopy.count) label masks")
                 }
 
-                // Export JSON if enabled
                 if shouldExportJSON {
                     let jsonURL = exportDir.appendingPathComponent("blink_annotations.json")
                     let annotationArray = annotationsCopy.values.sorted { $0.imageName < $1.imageName }
@@ -346,20 +335,17 @@ struct ExportSheetView: View {
                     let jsonData = try encoder.encode(annotationArray)
                     try jsonData.write(to: jsonURL)
                     fileCount += 1
-                    print("[Export] Created blink_annotations.json")
                 }
 
-                print("[Export] Complete! \(fileCount) files in \(exportFolderName)")
-
+                let finalCount = fileCount
                 await MainActor.run {
                     self.exportedFolderURL = exportDir
-                    self.exportedFileCount = fileCount
+                    self.exportedFileCount = finalCount
                     self.exportComplete = true
                     self.isExporting = false
                 }
 
             } catch {
-                print("[Export] Error: \(error.localizedDescription)")
                 await MainActor.run {
                     self.errorMessage = error.localizedDescription
                     self.isExporting = false
