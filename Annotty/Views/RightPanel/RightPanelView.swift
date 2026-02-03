@@ -4,6 +4,8 @@ import SwiftUI
 struct RightPanelView: View {
     @ObservedObject var viewModel: CanvasViewModel
     let onSettingsTapped: () -> Void
+    let onAutoDetect: () -> Void
+    let isDetecting: Bool
 
     var body: some View {
         ScrollView {
@@ -47,6 +49,29 @@ struct RightPanelView: View {
                     .cornerRadius(8)
                 }
                 .buttonStyle(.plain)
+                .padding(.horizontal, 8)
+
+                // SegFormer auto-detect button
+                Button(action: onAutoDetect) {
+                    VStack(spacing: 4) {
+                        if isDetecting {
+                            ProgressView()
+                                .tint(.white)
+                        } else {
+                            Image(systemName: "brain")
+                                .font(.title2)
+                        }
+                        Text("SegFormer")
+                            .font(.caption2)
+                    }
+                    .foregroundColor(.white)
+                    .padding(12)
+                    .frame(maxWidth: .infinity)
+                    .background(Color.purple.opacity(isDetecting ? 0.4 : 0.7))
+                    .cornerRadius(8)
+                }
+                .buttonStyle(.plain)
+                .disabled(isDetecting)
                 .padding(.horizontal, 8)
 
                 Spacer()
@@ -126,7 +151,9 @@ struct RightPanelView: View {
 #Preview {
     RightPanelView(
         viewModel: CanvasViewModel(),
-        onSettingsTapped: {}
+        onSettingsTapped: {},
+        onAutoDetect: {},
+        isDetecting: false
     )
     .frame(width: 120, height: 600)
 }

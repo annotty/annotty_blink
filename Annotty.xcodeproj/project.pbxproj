@@ -6,8 +6,15 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		BF5A94632F311DD200D25EAF /* detect_yolo11n.mlpackage in Sources */ = {isa = PBXBuildFile; fileRef = BF5A94622F311DD200D25EAF /* detect_yolo11n.mlpackage */; };
+		BF5A94652F311DE200D25EAF /* seg_segformer_b3.mlpackage in Sources */ = {isa = PBXBuildFile; fileRef = BF5A94642F311DE200D25EAF /* seg_segformer_b3.mlpackage */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		BF38C4B72EFE4AB40017ECA5 /* Annotty.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Annotty.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		BF5A94622F311DD200D25EAF /* detect_yolo11n.mlpackage */ = {isa = PBXFileReference; lastKnownFileType = folder.mlpackage; path = detect_yolo11n.mlpackage; sourceTree = "<group>"; };
+		BF5A94642F311DE200D25EAF /* seg_segformer_b3.mlpackage */ = {isa = PBXFileReference; lastKnownFileType = folder.mlpackage; path = seg_segformer_b3.mlpackage; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -47,6 +54,8 @@
 			children = (
 				BF38C4B92EFE4AB40017ECA5 /* Annotty */,
 				BF38C4B82EFE4AB40017ECA5 /* Products */,
+				BF5A94622F311DD200D25EAF /* detect_yolo11n.mlpackage */,
+				BF5A94642F311DE200D25EAF /* seg_segformer_b3.mlpackage */,
 			);
 			sourceTree = "<group>";
 		};
@@ -132,6 +141,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BF5A94652F311DE200D25EAF /* seg_segformer_b3.mlpackage in Sources */,
+				BF5A94632F311DD200D25EAF /* detect_yolo11n.mlpackage in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

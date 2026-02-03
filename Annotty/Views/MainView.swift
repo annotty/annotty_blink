@@ -52,7 +52,9 @@ struct MainView: View {
                         withAnimation(.easeInOut(duration: 0.25)) {
                             showingImageSettings = true
                         }
-                    }
+                    },
+                    onAutoDetect: { viewModel.autoDetectEyes() },
+                    isDetecting: viewModel.isDetectingEyes
                 )
                 .frame(width: 130)
             }
@@ -103,6 +105,13 @@ struct MainView: View {
             }
         } message: {
             Text(viewModel.importResultMessage ?? "")
+        }
+        .alert("Eye Detection Error", isPresented: $viewModel.showEyeDetectionError) {
+            Button("OK", role: .cancel) {
+                viewModel.eyeDetectionError = nil
+            }
+        } message: {
+            Text(viewModel.eyeDetectionError ?? "")
         }
         #if os(iOS)
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in

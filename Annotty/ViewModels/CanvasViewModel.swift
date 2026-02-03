@@ -97,6 +97,17 @@ class CanvasViewModel: ObservableObject {
     /// Show import result alert
     @Published var showImportResultAlert: Bool = false
 
+    // MARK: - Eye Detection State
+
+    /// Whether eye detection inference is running
+    @Published var isDetectingEyes: Bool = false
+
+    /// Error message from eye detection
+    @Published var eyeDetectionError: String?
+
+    /// Show eye detection error alert
+    @Published var showEyeDetectionError: Bool = false
+
     /// UserDefaults key for last viewed image
     private static let lastImageNameKey = "annotty.lastImageName"
 
@@ -980,6 +991,73 @@ class CanvasViewModel: ObservableObject {
         transformVersion += 1
 
         print("[ResetAll] All data has been reset")
+    }
+
+    // MARK: - Auto Eye Detection
+
+    /// URL of the current image file
+    var currentImageURL: URL? {
+        imageManager.currentItem?.url
+    }
+
+    /// Run YOLO + SegFormer pipeline to auto-detect eye landmarks
+    func autoDetectEyes() {
+        guard let imageURL = currentImageURL else { return }
+
+        createAnnotationIfNeeded()
+        pushUndoState()
+        isDetectingEyes = true
+
+        Task.detached { [weak self] in
+            do {
+                let result = try await EyeDetectionService.shared.detect(imageURL: imageURL)
+
+                if result.leftEye == nil && result.rightEye == nil {
+                    throw EyeDetectionError.noEyesDetected
+                }
+
+                await MainActor.run {
+                    guard let self = self else { return }
+
+                    // Apply right eye results
+                    // pupilCenter is optional — nil means iris not visible,
+                    // so we skip those lines and let previous-frame values persist
+                    if let right = result.rightEye {
+                        if let px = right.pupilCenterX {
+                            self.setLinePosition(for: .rightPupilVertical, value: px)
+                        }
+                        if let py = right.pupilCenterY {
+                            self.setLinePosition(for: .rightPupilHorizontal, value: py)
+                        }
+                        self.setLinePosition(for: .rightUpperLid, value: right.upperLidY)
+                        self.setLinePosition(for: .rightLowerLid, value: right.lowerLidY)
+                    }
+
+                    // Apply left eye results
+                    if let left = result.leftEye {
+                        if let px = left.pupilCenterX {
+                            self.setLinePosition(for: .leftPupilVertical, value: px)
+                        }
+                        if let py = left.pupilCenterY {
+                            self.setLinePosition(for: .leftPupilHorizontal, value: py)
+                        }
+                        self.setLinePosition(for: .leftUpperLid, value: left.upperLidY)
+                        self.setLinePosition(for: .leftLowerLid, value: left.lowerLidY)
+                    }
+
+                    self.isDetectingEyes = false
+                    print("[EyeDetection] Applied: left=\(result.leftEye != nil), right=\(result.rightEye != nil)")
+                }
+            } catch {
+                await MainActor.run {
+                    guard let self = self else { return }
+                    self.isDetectingEyes = false
+                    self.eyeDetectionError = error.localizedDescription
+                    self.showEyeDetectionError = true
+                    print("[EyeDetection] Error: \(error)")
+                }
+            }
+        }
     }
 
     // MARK: - Save/Load
